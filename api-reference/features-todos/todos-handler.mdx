@@ -1,0 +1,174 @@
+---
+title: 'Todos Handler'
+description: 'HTTP handler implementation for /todos routes providing CRUD, search, sorting and rendering using HTMX, integrating with the todos service'
+---
+
+# Todos Handler
+
+The **Todos Handler** is the HTTP layer responsible for managing all incoming requests related to the todo items in the application. It exposes endpoints supporting CRUD operations (Create, Read, Update, Delete) as well as search and sort functionalities under the `/todos` route. The handler interacts with the underlying **Todos Service** to apply business logic and communicates responses back via HTML rendering or HTTP redirects.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Responsibilities](#key-responsibilities)
+- [Endpoints](#endpoints)
+- [Code Example](#code-example)
+- [Integration](#integration)
+- [Request Flow Diagram](#request-flow-diagram)
+
+---
+
+## Overview
+
+The Todos Handler acts as the controller for the todos feature, translating HTTP requests into service calls and rendering the appropriate responses using HTML templates. It optionally supports enhanced UI behavior using HTMX to enable dynamic partial updates.
+
+The handler manages the todo lifecycle with endpoints to list, create, update, delete, search, and reorder todo items.
+
+## Key Responsibilities
+
+- Parse and validate HTTP requests related to todos.
+- Call appropriate business logic methods in the **Todos Service**.
+- Render full pages or partial templates depending on request context (e.g., HTMX requests).
+- Provide HTTP responses including redirects, errors, and success statuses.
+- Support todo sorting by accepting reordered ID lists.
+
+## Endpoints
+
+| Method | Route                  | Purpose                                      |
+|--------|------------------------|----------------------------------------------|
+| GET    | `/todos`               | List todos with optional search query        |
+| POST   | `/todos`               | Create a new todo item                        |
+| PATCH  | `/todos/{todoId}`      | Update todo completion status and description|
+| POST   | `/todos/{todoId}/edit` | Alternative update endpoint for a todo       |
+| GET    | `/todos/{todoId}`      | Retrieve a specific todo                      |
+| DELETE | `/todos/{todoId}`      | Delete a specific todo                        |
+| POST   | `/todos/{todoId}/delete`| Alternative delete route                      |
+| POST   | `/todos/sort`          | Submit reordered list of todo IDs for sorting|
+
+## Code Example
+
+Below is a representative example illustrating the pattern for handling the creation of a new todo and searching todos (from the `internal/features/todos/handler.go`):
+
+```go
+package todos
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+func (h *handler) Create(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+	description := r.FormValue("description")
+	if description == "" {
+		http.Error(w, "Description required", http.StatusBadRequest)
+		return
+	}
+
+	todo, err := h.service.Add(r.Context(), description)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Use HTMX rendering if requested,
+	// else redirect to /todos page
+	if isHTMX(r) {
+		renderer := partials.RenderTodo(todo)
+		renderer.Render(r.Context(), w)
+		return
+	}
+
+	http.Redirect(w, r, "/todos", http.StatusSeeOther)
+}
+
+func (h *handler) Search(w http.ResponseWriter, r *http.Request) {
+	search := r.URL.Query().Get("search")
+	todos, err := h.service.Search(r.Context(), search)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	renderer := pages.TodosPage(todos, search)
+	renderer.Render(r.Context(), w)
+}
+```
+
+This code snippet shows:
+
+- Parsing form or query parameters
+- Calling service methods to perform business logic
+- Conditional rendering based on HTMX request headers
+- HTTP error handling and redirects
+
+## Integration
+
+The Todos Handler plays a critical role bridging the HTTP server and the todos feature domain:
+
+- **Incoming Requests:** It is bound to the `/todos` route via Chi router mounting.
+- **Service Dependency:** Depends on the Todos Service layer (`internal/features/todos/service.go`) which contains core business logic.
+- **Template Rendering:** Uses page and partial templates (`internal/templates/pages`, `internal/templates/partials`) to produce HTML output.
+- **Domain Models:** Interacts with domain `Todo` models via service abstractions.
+- **HTMX Support:** Adds dynamic partial render responses to enhance UX.
+
+[name](/cmd/server/main.go) sets up the routing by mounting the todos handler as follows:
+
+```go
+service := todos.NewService(list)
+handler := todos.NewHandler(service)
+todos.Mount(router, handler)
+```
+
+This integration shows clear separation of concerns: HTTP handling ➔ Service logic ➔ Domain model.
+
+## Request Flow Diagram
+
+```mermaid
+flowchart TD
+  A[HTTP Request to /todos] --> B{Is it a CRUD operation?}
+  B -- Create --> C[Parse Form Data]
+  C --> D[Call service.Add()]
+  D --> E{HTMX request?}
+  E -- Yes --> F[Render partial response with new todo]
+  E -- No --> G[Redirect to /todos]
+
+  B -- Read/List --> H[Parse Query Params]
+  H --> I[Call service.Search()]
+  I --> J[Render full todos page]
+
+  B -- Update --> K[Parse todoId & form]
+  K --> L[Call service.Update()]
+  L --> M[Redirect or render partial]
+
+  B -- Delete --> N[Parse todoId]
+  N --> O[Call service.Remove()]
+  O --> P[Redirect back to /todos]
+
+  B -- Sort --> Q[Parse ordered IDs]
+  Q --> R[Call service.Sort()]
+  R --> S[Redirect back]
+
+  F & J & M & P & S --> T[HTTP Response]
+```
+
+---
+
+## Source
+- Full handler implementation: [internal/features/todos/handler.go](/internal/features/todos/handler.go)
+- Service layer: [internal/features/todos/service.go](/internal/features/todos/service.go)
+- Templates used: [internal/templates/pages](internal/templates/pages), [internal/templates/partials](internal/templates/partials)
+
+---
+
+<Note>
+The Todos Handler is designed for extensibility, handling both full page reloads and partial HTMX-enhanced updates seamlessly. This design pattern promotes progressive enhancement and fast user experiences.
+</Note>

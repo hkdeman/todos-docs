@@ -1,0 +1,189 @@
+---
+title: 'Frontend and Static Assets Architecture'
+description: 'Description of the frontend technologies, embedding of static assets, TailwindCSS integration and serving of static files via embedded FS'
+---
+
+# Frontend and Static Assets Architecture
+
+This section describes how the frontend static assets are managed, embedded, and served within the todo web server application. It explains the architecture used to bundle client-side assets, expose them over HTTP, and integrate them with the Go backend, enabling seamless static file delivery optimized for deployment.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Static Assets Embedding](#static-assets-embedding)
+- [Serving Embedded Assets](#serving-embedded-assets)
+- [Integration with HTTP Router](#integration-with-http-router)
+- [Example: Embedding and Mounting Assets](#example-embedding-and-mounting-assets)
+- [Architecture Diagram](#architecture-diagram)
+- [Integration Details and Dependencies](#integration-details-and-dependencies)
+
+---
+
+## Overview
+
+The frontend assets (JavaScript, CSS, images, fonts, and other static files) are a crucial part of the web server, enabling UI presentation and interactivity. This application uses Go 1.16's `embed` package to compile static assets directly into the executable binary. This approach eliminates the need for external static file servers or runtime file dependencies, making deployment simpler and more robust.
+
+The embedded assets correspond to the frontend build output located in the `/dist` directory, which typically contains the processed TailwindCSS, HTMX-enhanced HTML templates, client JS files, and other necessary resources.
+
+Serving these assets efficiently is achieved by mounting a dedicated HTTP route (`/dist/*`) that delivers these files on requests.
+
+---
+
+## Static Assets Embedding
+
+Go's `embed` package facilitates embedding files or directories at compile-time. The application defines an embedded filesystem variable to include all files from the `dist` directory:
+
+```go
+package assets
+
+import (
+  "embed"
+)
+
+// Assets embeds all files in internal/assets/dist
+//go:embed dist/*
+var Assets embed.FS
+```
+
+- This declaration bundles the entire `dist` directory contents.
+- `Assets` is an `embed.FS` filesystem compliant with Go's `fs.FS` API, allowing access to asset files.
+
+---
+
+## Serving Embedded Assets
+
+A function mounts the embedded filesystem onto the HTTP router using `http.FileServer` wrapped by `http.FS`:
+
+```go
+package assets
+
+import (
+  "net/http"
+  "github.com/go-chi/chi/v5"
+)
+
+// Mount attaches the /dist route serving embedded static files
+func Mount(r chi.Router) {
+  fs := http.FS(Assets)
+  fileServer := http.FileServer(fs)
+
+  r.Route("/dist", func(r chi.Router) {
+    r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+      fileServer.ServeHTTP(w, r)
+    })
+  })
+}
+```
+
+- This sets up the `GET /dist/*` route to serve all embedded static files.
+- Using `http.FileServer` ensures proper handling of content types, byte ranges, caching headers, and directory indexes.
+
+---
+
+## Integration with HTTP Router
+
+- The application uses the [chi router](https://github.com/go-chi/chi) for routing HTTP requests.
+- The `assets.Mount()` function is called during server startup to integrate these static asset routes into the main route tree.
+
+The relevant integration occurs in `cmd/server/main.go`:
+
+```go
+router := chi.NewRouter()
+
+// Mount the static assets handler
+assets.Mount(router)
+```
+
+This setup ensures that all requests to `/dist/*` are handled by the embedded asset server.
+
+---
+
+## Example: Embedding and Mounting Assets
+
+Here's a minimal example demonstrating embedding assets and mounting them to a `chi` router:
+
+```go
+package main
+
+import (
+  "embed"
+  "net/http"
+  "github.com/go-chi/chi/v5"
+)
+
+//go:embed dist/*
+var assets embed.FS
+
+func main() {
+  r := chi.NewRouter()
+
+  fs := http.FS(assets)
+  fileServer := http.FileServer(fs)
+
+  r.Route("/dist", func(r chi.Router) {
+    r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+      fileServer.ServeHTTP(w, r)
+    })
+  })
+
+  http.ListenAndServe(":3000", r)
+}
+```
+
+- This example compiles `dist` directory assets and serves them on `/dist/*`.
+- The server listens on port 3000 and supports all static asset requests.
+
+---
+
+## Architecture Diagram
+
+```mermaid
+flowchart TD
+  A[Frontend Build Output] --> B[embedded via Go embed.FS]
+  B --> C[Embedded Assets (internal/assets/dist)]
+  C --> D[assets.Mount registers /dist route]
+  D --> E[chi Router]
+  E --> F[Go HTTP Server]
+  F -->|Requests for /dist/*| G[Serve Embedded Static Files]
+```
+
+- Frontend assets built externally are embedded into Go binary.
+- The embedded filesystem is mounted on `/dist` route.
+- HTTP requests for `/dist/*` are routed via chi and served from embedded assets.
+
+---
+
+## Integration Details and Dependencies
+
+### Dependencies
+
+- **Go 1.16+**: Required for native `embed` package support.
+- **`github.com/go-chi/chi`**: Router used to mount handlers and route requests.
+- **`net/http`**: Standard library package to serve static files.
+
+### System Touchpoints
+
+- **Frontend build system** outputs compiled static resources into `/dist`.
+- **Embedding step** includes `/dist` contents via `//go:embed` directive.
+- **Router setup** mounts embedded assets on `/dist/*` path.
+- **HTTP server** listens for requests, dispatching static asset requests to embedded file server.
+
+### Responsibilities
+
+- Keep static asset files in sync with embedded assets directory.
+- Ensure HTTP routes for static content are properly mounted early in the server lifecycle.
+- Manage caching and content negotiation through HTTP server configurations or middleware (extension point).
+
+---
+
+## See Also
+
+- [Embedding and Serving Static Assets](/internal/assets/embed.go)
+- [Server Setup and Routing](/cmd/server/main.go)
+- [Frontend Technologies Overview](/Getting%20Started/Technologies:%20HTMX,%20templ%20&%20TailwindCSS)
+
+---
+
+This architecture allows the todo web server to be self-contained, with frontend assets tightly integrated into the backend binary for ease of deployment and reliable static resource delivery.

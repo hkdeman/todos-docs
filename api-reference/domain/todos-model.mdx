@@ -1,0 +1,180 @@
+---
+title: 'Todos Model'
+description: 'API reference for the Todos struct representing collections of Todo pointers with methods for CRUD, search, reorder and retrieval'
+---
+
+# Todos Model
+
+The **Todos** model represents a collection of todo items in the application. It encapsulates a list of individual `Todo` entities and provides methods to manipulate this list including creation, retrieval, update, removal, searching, and reordering of todos.
+
+This model acts as a core domain abstraction managing in-memory todo data and serves as the backbone of todo-related features in the system.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Todos Type and Structure](#todos-type-and-structure)
+- [Key Methods](#key-methods)
+- [Code Example](#code-example)
+- [Integration Details](#integration-details)
+- [Mermaid Diagram](#mermaid-diagram)
+- [Reference](#reference)
+
+---
+
+## Overview
+
+The `Todos` model is designed to manage a mutable collection of `Todo` items. Each `Todo` represents a single task with properties such as an ID, description, completion status, and creation timestamp.
+
+`Todos` provides convenient methods to:
+
+- Add new items
+- Remove by unique ID
+- Update existing todos
+- Search within descriptions
+- Retrieve all or specific items
+- Reorder the list based on a new order of IDs
+
+This abstraction is primarily used internally by the domain layer and is leveraged by services and handlers to manage todo state.
+
+---
+
+## Todos Type and Structure
+
+- **Type:** `Todos`
+- **Underlying data:** Slice of pointers to `Todo` (`[]*Todo`)
+
+The `Todos` type contains an internal slice that holds references to `Todo` pointers.
+
+Each `Todo` includes:
+
+- `ID`: a unique identifier (UUID)
+- `Description`: a textual description of the task
+- `Completed`: boolean indicating completion status
+- `CreatedAt`: timestamp of creation
+
+---
+
+## Key Methods
+
+Here are the primary methods provided by the `Todos` model:
+
+| Method                                              | Description                                                           |
+|-----------------------------------------------------|-----------------------------------------------------------------------|
+| `NewTodos() *Todos`                                 | Creates and returns an empty Todos instance.                          |
+| `(t *Todos) Add(description string) *Todo`          | Adds a new Todo with the provided description and returns it.        |
+| `(t *Todos) Remove(id uuid.UUID)`                    | Removes the Todo identified by the given ID.                         |
+| `(t *Todos) Update(id uuid.UUID, completed bool, description string) *Todo` | Updates the completion status and description of the Todo with the given ID. |
+| `(t *Todos) Search(search string) []*Todo`          | Returns a slice of Todos matching the search string in their description. |
+| `(t *Todos) All() []*Todo`                           | Returns all Todos in the current list.                                |
+| `(t *Todos) Get(id uuid.UUID) *Todo`                 | Retrieves the Todo by ID if it exists.                                |
+| `(t *Todos) Reorder(ids []uuid.UUID) []*Todo`        | Reorders Todos according to the given list of IDs.                   |
+
+The underlying implementation ensures efficient manipulation and querying of the todo list.
+
+---
+
+## Code Example
+
+```go
+package main
+
+import (
+  "fmt"
+  "github.com/google/uuid"
+  "internal/domain"
+)
+
+func main() {
+  todos := domain.NewTodos() // Create new Todos list
+
+  // Add todos
+  todo1 := todos.Add("Buy groceries")
+  todo2 := todos.Add("Schedule meeting")
+
+  fmt.Println("All Todos:")
+  for _, t := range todos.All() {
+    fmt.Printf("- %s (Completed: %v)\n", t.Description, t.Completed)
+  }
+
+  // Update todo1
+  todos.Update(todo1.ID, true, "Buy groceries and snacks")
+
+  // Search todos containing "meeting"
+  found := todos.Search("meeting")
+  fmt.Printf("\nSearch 'meeting' found %d todo(s).\n", len(found))
+
+  // Remove todo2
+  todos.Remove(todo2.ID)
+}
+```
+
+_Comments:_
+- `NewTodos` initializes the todo list.
+- Using `Add` to create new entries.
+- Updates use `Update` with the todo's UUID.
+- Search filters based on description text.
+- Remove deletes by UUID.
+
+---
+
+## Integration Details
+
+- **Location in Project:** The Todos model is implemented in the domain layer at `[internal/domain/todos.go](/internal/domain/todos.go)`.
+
+- **Interactions:**
+  - Used by service layers such as the `todos.Service` and `home.Service` to perform business logic operations.
+  - Controllers/handlers invoke service methods which internally interact with the `Todos` model to manipulate todo data.
+  - The domain model abstracts state and persistence concerns, enabling separation from transport and UI layers.
+
+- **Dependencies:**
+  - Relies on the `Todo` struct defined in `[internal/domain/todo.go](/internal/domain/todo.go)`.
+  - Uses UUIDs from `github.com/google/uuid` for unique identification.
+
+- **Responsibility:**
+  - Manage the lifecycle of todo entities in memory.
+  - Provide consistent access and mutation methods.
+  - Support querying like search and reordering.
+
+This modular design enables clear separation of concerns and extensibility.
+
+---
+
+## Mermaid Diagram
+
+```mermaid
+flowchart TD
+  A[NewTodos()] --> B[Todos instance]
+  B --> C[Add(description)]
+  B --> D[Remove(id)]
+  B --> E[Update(id, completed, description)]
+  B --> F[Search(searchTerm)]
+  B --> G[All()]
+  B --> H[Get(id)]
+  B --> I[Reorder(ids)]
+
+  subgraph Todo Entity
+    C -.Creates.-> J[Todo]
+    E -.Modifies.-> J
+    H -.Retrieves.-> J
+  end
+
+  style Todo Entity fill:#f9f,stroke:#333,stroke-width:1px
+```
+
+This diagram illustrates primary methods of `Todos` and their relationship with `Todo` entities.
+
+---
+
+## Reference
+
+- Implementation file: [internal/domain/todos.go](/internal/domain/todos.go)
+- Todo definition: [internal/domain/todo.go](/internal/domain/todo.go)
+- Service usage example: [internal/features/todos/service.go](/internal/features/todos/service.go)
+
+---
+
+For tests and mock implementation related to `Todos`, see:
+- Test file: [internal/domain/todo_test.go](/internal/domain/todo_test.go)
+- Mock repository: [internal/domain/mock_todo_repository.go](/internal/domain/mock_todo_repository.go)

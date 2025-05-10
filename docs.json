@@ -1,0 +1,118 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "almond",
+  "name": "Docucod",
+  "colors": {
+    "primary": "#60A5FA",
+    "light": "#60A5FA",
+    "dark": "#1E3A8A"
+  },
+  "favicon": "/favicon.svg",
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": "dark"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "fonts": {
+    "family": "Montserrat",
+    "source": "https://fonts.gstatic.com/s/googlesansflex/v5/t5sJIQcYNIWbFgDgAAzZ34auoVyXkJCOvp3SFWJbN5hF8Ju1x6sKCyp0l9sI40swNJwGpVd4AZzz0v6lJ4qFXNZhGjLvDSkV4USKMo6qQzwliVdHAy9jxTDHg_ugnAakpwGc-cxgUqDCIUI.woff2",
+    "format": "woff2"
+  },
+  "background": {
+    "decoration": "gradient"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "documentation/getting-started/overview",
+              "documentation/getting-started/installation-and-running",
+              "documentation/getting-started/htmx-templ-tailwind-intro"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "documentation/architecture/app-architecture",
+              "documentation/architecture/domain-model",
+              "documentation/architecture/service-layer-architecture",
+              "documentation/architecture/frontend-architecture",
+              "documentation/architecture/routing-and-server-setup"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "documentation/features/home-feature",
+              "documentation/features/todos-feature"
+            ]
+          },
+          {
+            "group": "Templates and UI Rendering",
+            "pages": [
+              "documentation/templates/templating-overview",
+              "documentation/templates/page-templates",
+              "documentation/templates/partial-templates"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": [
+              "documentation/testing/domain-tests",
+              "documentation/testing/feature-tests"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Domain Layer",
+            "pages": [
+              "api-reference/domain/todo-model",
+              "api-reference/domain/todos-model",
+              "api-reference/domain/todo-repository"
+            ]
+          },
+          {
+            "group": "Home Feature",
+            "pages": [
+              "api-reference/features-home/home-service",
+              "api-reference/features-home/home-handler"
+            ]
+          },
+          {
+            "group": "Todos Feature",
+            "pages": [
+              "api-reference/features-todos/todos-service",
+              "api-reference/features-todos/todos-handler"
+            ]
+          },
+          {
+            "group": "Static Assets",
+            "pages": [
+              "api-reference/assets/assets-embedding"
+            ]
+          },
+          {
+            "group": "Mocks and Testing Utilities",
+            "pages": [
+              "api-reference/mocks/mock-todo-repository"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/logo.png",
+    "dark": "/logo/logo.png"
+  }
+}
