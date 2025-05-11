@@ -5,129 +5,110 @@ description: 'Interface defining repository contract for Todo persistence and ma
 
 # TodoRepository Interface
 
-The `TodoRepository` interface defines the contract for the data storage layer related to todo items within the domain. It abstracts the details of how todos are persisted, updated, retrieved, and manipulated, allowing the service and handler layers to interact with todo data without coupling to a specific storage implementation.
+The `TodoRepository` interface defines the contract for managing todo items within the domain layer of the application. It abstracts the details of storing, retrieving, updating, and deleting todo entities, allowing service layers and handlers to interact with todos without concerning themselves with storage implementation.
+
+This interface plays a central role in the domain-driven design of the application and serves as the foundation for persistence operations on todo data.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Interface Definition](#interface-definition)
-- [Methods](#methods)
-- [Example Implementation](#example-implementation)
-- [Integration Details](#integration-details)
+- [Interface Methods](#interface-methods)
+- [Code Example](#code-example)
+- [Integration and Architecture](#integration-and-architecture)
 - [Mermaid Diagram](#mermaid-diagram)
-- [Source Code Reference](#source-code-reference)
+- [Related Files](#related-files)
 
 ---
 
 ## Overview
 
-The `TodoRepository` interface serves as the domain-layer abstraction for todo persistence. It governs how todos can be:
+The `TodoRepository` interface is defined in the domain layer to provide a unified set of methods for todo item management. It encapsulates all operations needed to create, update, delete, search, reorder, and fetch todos.
 
-- Added (created)
-- Removed (deleted)
-- Updated (modified)
-- Searched (filtered by query)
-- Retrieved all or individually
-- Reordered (rearranged according to a given sequence)
-
-This separation provides flexibility, allowing different storage backends to be used (e.g., in-memory, database, mocks for testing) while keeping business logic clean and focused.
+By abstracting the storage operations, this interface allows different persistence implementations (e.g., in-memory, database, mocks) to be swapped seamlessly without impacting the business logic or HTTP layers.
 
 ---
 
-## Interface Definition
+## Interface Methods
+
+| Method | Description |
+|--------|-------------|
+| `Add(description string) *Todo` | Creates and adds a new todo item with the given description.
+| `Remove(id uuid.UUID)` | Deletes the todo with the given unique identifier.
+| `Update(id uuid.UUID, completed bool, description string) *Todo` | Updates the completed status and description of the specified todo.
+| `Search(search string) []*Todo` | Searches todos matching the provided query string.
+| `All() []*Todo` | Retrieves all todo items.
+| `Get(id uuid.UUID) *Todo` | Retrieves a specific todo by its unique ID.
+| `Reorder(ids []uuid.UUID) []*Todo` | Reorders todos to match the given ID order.
+
+---
+
+## Code Example
 
 ```go
-// TodoRepository defines methods to manage Todo entities
-// within the domain layer.
-type TodoRepository interface {
-    Add(description string) *Todo
-    Remove(id uuid.UUID)
-    Update(id uuid.UUID, completed bool, description string) *Todo
-    Search(search string) []*Todo
-    All() []*Todo
-    Get(id uuid.UUID) *Todo
-    Reorder(ids []uuid.UUID) []*Todo
-}
-```
+package domain
 
-Each method is designed to operate on todo entities, identified uniquely by a UUID, and returns relevant results for use by the service layer.
-
----
-
-## Methods
-
-| Method                         | Description                                               | Input                             | Output                  |
-| ------------------------------|-----------------------------------------------------------|----------------------------------|-------------------------|
-| `Add(description string)`      | Adds a new todo with the given description                | Description string                | Newly created *Todo      |
-| `Remove(id uuid.UUID)`         | Removes the todo identified by the given ID               | UUID                             | None                    |
-| `Update(id uuid.UUID, completed bool, description string)` | Updates a todo's completion status and description | UUID, Completion flag, Description | Updated *Todo           |
-| `Search(search string)`        | Searches todos matching the search query                  | Search string                    | Slice of matching *Todo |
-| `All()`                       | Retrieves all todos                                        | None                             | Slice of all *Todo      |
-| `Get(id uuid.UUID)`            | Retrieves a single todo by ID                              | UUID                             | Queried *Todo           |
-| `Reorder(ids []uuid.UUID)`      | Reorders todos according to given IDs                      | Slice of UUIDs                   | Slice of reordered *Todo|
-
----
-
-## Example Implementation
-
-Here is a minimal example illustrating how one might implement the `TodoRepository` interface backed by an in-memory slice:
-
-```go
 import (
-    "github.com/google/uuid"
-    "sync"
+  "github.com/google/uuid"
 )
 
-type InMemoryTodoRepository struct {
-    todos []*Todo
-    mu    sync.Mutex
+// TodoRepository provides access to manage todo entities.
+type TodoRepository interface {
+  Add(description string) *Todo
+  Remove(id uuid.UUID)
+  Update(id uuid.UUID, completed bool, description string) *Todo
+  Search(search string) []*Todo
+  All() []*Todo
+  Get(id uuid.UUID) *Todo
+  Reorder(ids []uuid.UUID) []*Todo
 }
 
-func NewInMemoryTodoRepository() *InMemoryTodoRepository {
-    return &InMemoryTodoRepository{}
+// Example usage in service layer
+func ExampleUsage(repo TodoRepository) {
+  // Add a new todo
+  newTodo := repo.Add("Write documentation")
+
+  // Update todo
+  updatedTodo := repo.Update(newTodo.ID, true, "Write complete docs")
+
+  // Search todos
+  results := repo.Search("docs")
+
+  // Reorder todos
+  var ids []uuid.UUID
+  for _, t := range results {
+    ids = append(ids, t.ID)
+  }
+  repo.Reorder(ids)
 }
-
-func (r *InMemoryTodoRepository) Add(description string) *Todo {
-    r.mu.Lock()
-    defer r.mu.Unlock()
-
-    todo := NewTodo(description)
-    r.todos = append(r.todos, todo)
-    return todo
-}
-
-// Other methods (Remove, Update, etc.) follow similar pattern
 ```
-
-This example locks during updates to ensure thread safety in concurrent environments.
 
 ---
 
-## Integration Details
+## Integration and Architecture
 
-The `TodoRepository` interface plays a pivotal role in the architecture by:
+### Role in the System
 
-- **Decoupling domain data logic from storage**: Services and handlers depend on this interface, enabling easier swapping of storage implementations.
-- **Facilitating Testing**: Mock implementations can be injected during tests to simulate repository behavior without a real database.
-- **Representing the Domain Model Boundary**: Acts as the data access boundary of the domain layer, enforcing separation between domain logic and persistence.
+- **Domain Layer**: The `TodoRepository` interface is a core abstraction in the domain layer.
+- **Service Layers**: Features like the Todos and Home service use this interface to implement business logic without direct dependence on persistence details.
+- **Handlers**: HTTP handlers depend on services that abstract the repository, indirectly interacting with the repository via service methods.
 
-### Typical Interaction Pattern
+### Dependencies
 
-```mermaid
-flowchart TD
-  H[HTTP Handler] -->|calls| S[Service Layer]
-  S -->|calls| R[TodoRepository Interface]
-  R -->|persists/returns| D[Data Store or Mock]
-```
+- Utilizes `uuid.UUID` for uniquely identifying todo items.
+- Operates with domain entities such as `Todo`.
 
-Here, handlers use services to process requests. Services call the repository interface to fetch or modify todo data, which interacts with the actual data store.
+### Interaction Pattern
 
-### Key Dependencies
+Services call repository methods to:
 
-- The repository requires unique todo identification, typically using `uuid.UUID`.
-- Todo entities come from the domain model (`*Todo` from the domain package).
+- Add new todos when receiving create requests.
+- Update or remove todos in response to client actions.
+- Fetch the entire todo collection or search-specific todos for display.
+- Reorder todos as per client-side sorting.
+
+This separation allows for easy replacement or mocking of the repository.
 
 ---
 
@@ -135,39 +116,23 @@ Here, handlers use services to process requests. Services call the repository in
 
 ```mermaid
 flowchart TD
-  subgraph Domain Layer
-    direction TB
-    TR(TodoRepository Interface)
-    TD(*Todo Entities)
-  end
-
-  subgraph Service Layer
-    SVC[Todos Service]
-  end
-
-  subgraph Presentation Layer
-    HDR[Todos Handler]
-  end
-
-  HDR -->|calls| SVC
-  SVC -->|uses| TR
-  TR -->|manipulates| TD
+  A[HTTP Handler] -->|calls| B[Service Layer]
+  B -->|calls| C[TodoRepository Interface]
+  C -.->|implemented by| D[In-Memory Repo]
+  C -.->|implemented by| E[Database Repo]
+  
+  B --> F[Business Logic]
+  C --> G[Persistence Layer]
 ```
 
-This diagram illustrates the layers and their interactions involving `TodoRepository`.
+---
+
+## Related Files
+
+- [`internal/domain/todo_repository.go`](/internal/domain/todo_repository.go) &mdash; Source file defining the `TodoRepository` interface.
+- [`internal/features/todos/service.go`](/internal/features/todos/service.go) &mdash; Uses `TodoRepository` interface to implement business logic.
+- [`internal/domain/mock_todo_repository.go`](/internal/domain/mock_todo_repository.go) &mdash; Contains a mock implementation used in unit tests.
 
 ---
 
-## Source Code Reference
-
-- You can find the full interface and declarations in the domain layer source: [`internal/domain/todo_repository.go`](/internal/domain/todo_repository.go)
-
-This centralized implementation is the backbone of data persistence in the todo application.
-
----
-
-Explore additional domain abstractions and implementations such as the [`MockTodoRepository`](/internal/domain/mock_todo_repository.go) for testing and the [`Todos`](/internal/domain/todos.go) collection that works with the repository interface.
-
----
-
-<Info>Understanding the `TodoRepository` interface helps in customizing storage solutions, extending the system, or writing integration tests by leveraging domain-driven design principles.</Info>
+This interface is crucial for maintaining clean separation of concerns and a flexible architecture within the Todo application.

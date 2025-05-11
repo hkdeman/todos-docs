@@ -5,7 +5,9 @@ description: 'Public APIs and implementation of todos.Service interface managing
 
 # Todos Service
 
-The Todos Service is the core business logic layer for managing todo items in the application. It acts as an intermediary between the domain layer (which defines the `Todo` model and repository interface) and the HTTP handlers that expose todo features via API endpoints. This service encapsulates operations such as adding, removing, updating, searching, retrieving, and sorting todos.
+The **Todos Service** is the core business logic layer responsible for managing todo items. It acts as an intermediary between the lower-level domain repository (which manages raw data storage and retrieval) and the HTTP handlers that expose the functionality via API endpoints.
+
+This service provides a clean interface to add, update, remove, search, get, and reorder todos. It encapsulates the domain logic and data manipulation rules, ensuring the rest of the application code remains decoupled from persistence details.
 
 ---
 
@@ -15,142 +17,147 @@ The Todos Service is the core business logic layer for managing todo items in th
 - [Service Interface](#service-interface)
 - [Service Implementation](#service-implementation)
 - [Usage Example](#usage-example)
-- [Integration with the System](#integration-with-the-system)
+- [Integration](#integration)
 - [Mermaid Diagram](#mermaid-diagram)
-- [Source Links](#source-links)
 
 ---
 
 ## Overview
 
-The Todos Service provides a clear and consistent API for managing todo items throughout the application. It utilizes a `TodoRepository` from the domain layer to perform CRUD and search operations on the todo data storage.
+The Todos Service abstracts the todo management operations on a collection of todo items, allowing the application to:
 
-This abstraction is crucial to separate concerns, keeping business logic out of HTTP handlers and data persistence, supporting easier testing and maintainability.
+- Add new todo items with a description.
+- Remove todos by their unique IDs.
+- Update todos (including completion status and description).
+- Search todos by text query.
+- Retrieve a specific todo by ID.
+- Reorder the list of todos based on user-supplied ordering.
+
+It relies on the `TodoRepository` interface from the domain layer, which handles data persistence and retrieval. This separation enables easy unit testing and swapping of persistence layers.
 
 ---
 
 ## Service Interface
 
-The `Service` interface defines the capabilities offered by the todos feature service:
-
 ```go
-// Service defines todo management operations
+// Service defines the contract for todo management business logic.
 type Service interface {
-  Add(ctx context.Context, description string) (*domain.Todo, error)
-  Remove(ctx context.Context, id uuid.UUID) error
-  Update(ctx context.Context, id uuid.UUID, completed bool, description string) (*domain.Todo, error)
-  Search(ctx context.Context, search string) ([]*domain.Todo, error)
-  Get(ctx context.Context, id uuid.UUID) (*domain.Todo, error)
-  Sort(ctx context.Context, ids []uuid.UUID) error
+    Add(ctx context.Context, description string) (*domain.Todo, error)
+    Remove(ctx context.Context, id uuid.UUID) error
+    Update(ctx context.Context, id uuid.UUID, completed bool, description string) (*domain.Todo, error)
+    Search(ctx context.Context, search string) ([]*domain.Todo, error)
+    Get(ctx context.Context, id uuid.UUID) (*domain.Todo, error)
+    Sort(ctx context.Context, ids []uuid.UUID) error
 }
 ```
 
-Each method supports the context for cancellation/timeouts and operates on the domain `Todo` entities or related identifiers.
+- `Add` creates and stores a new todo with the given description.
+- `Remove` deletes the todo identified by the given UUID.
+- `Update` modifies the completed state and description of an existing todo.
+- `Search` returns all todos that match a search string.
+- `Get` retrieves a todo by ID.
+- `Sort` allows reordering todos by a slice of todo IDs representing the desired order.
 
 ---
 
 ## Service Implementation
 
-The concrete service implementation (`service`) holds a reference to a `TodoRepository` to delegate actual data operations:
+The concrete implementation `service` contains a reference to a `TodoRepository`, which handles the data layer.
 
 ```go
-// service is the concrete implementation of Service
-// It wraps domain.TodoRepository
 type service struct {
-  todos domain.TodoRepository
+    todos domain.TodoRepository
 }
 
-// NewService creates a new todos Service instance
 func NewService(todos domain.TodoRepository) Service {
-  return &service{todos: todos}
+    return &service{todos: todos}
 }
 
 func (s *service) Add(ctx context.Context, description string) (*domain.Todo, error) {
-  return s.todos.Add(description)
+    return s.todos.Add(description)
 }
 
 func (s *service) Remove(ctx context.Context, id uuid.UUID) error {
-  s.todos.Remove(id)
-  return nil // domain repo does not error on remove
+    s.todos.Remove(id)
+    return nil
 }
 
 func (s *service) Update(ctx context.Context, id uuid.UUID, completed bool, description string) (*domain.Todo, error) {
-  return s.todos.Update(id, completed, description), nil
+    return s.todos.Update(id, completed, description), nil
 }
 
 func (s *service) Search(ctx context.Context, search string) ([]*domain.Todo, error) {
-  return s.todos.Search(search), nil
+    return s.todos.Search(search), nil
 }
 
 func (s *service) Get(ctx context.Context, id uuid.UUID) (*domain.Todo, error) {
-  return s.todos.Get(id), nil
+    return s.todos.Get(id), nil
 }
 
 func (s *service) Sort(ctx context.Context, ids []uuid.UUID) error {
-  s.todos.Reorder(ids)
-  return nil
+    s.todos.Reorder(ids)
+    return nil
 }
 ```
 
-*Note:* The service methods delegate to the underlying `TodoRepository` which is an in-memory or persistent store abstraction.
+The implementation primarily delegates calls directly to the domain repository but can contain additional business-level validations or transformations as needed.
 
 ---
 
 ## Usage Example
 
-Here's a minimal example illustrating how to create and use the Todos service:
+Below is a minimal usage example illustrating how to create a Todos Service instance and add a todo.
 
 ```go
+package main
+
 import (
-  "context"
-  "fmt"
-  "github.com/google/uuid"
-  "internal/domain"
-  "internal/features/todos"
+    "context"
+    "fmt"
+    "github.com/google/uuid"
+    "internal/domain"
+    "internal/features/todos"
 )
 
-func exampleUsage() {
-  ctx := context.Background()
+func main() {
+    // Initialize domain in-memory todo repository
+    todoRepo := domain.NewTodos()
 
-  // Create a domain Todos repository instance (in-memory list)
-  todoRepo := domain.NewTodos()
+    // Create service layer
+    service := todos.NewService(todoRepo)
 
-  // Initialize Todos service
-  svc := todos.NewService(todoRepo)
+    ctx := context.Background()
 
-  // Add a new todo
-  todo, err := svc.Add(ctx, "Write documentation")
-  if err != nil {
-    panic(err)
-  }
-  fmt.Println("Added todo:", todo.Description)
+    // Add a new todo
+    todo, err := service.Add(ctx, "Write documentation")
+    if err != nil {
+        panic(err)
+    }
 
-  // Search todos
-  results, _ := svc.Search(ctx, "Write")
-  fmt.Printf("Search results count: %d\n", len(results))
+    fmt.Printf("Added Todo: %s - %s\n", todo.ID, todo.Description)
 
-  // Update a todo
-  updated, _ := svc.Update(ctx, todo.ID, true, "Write comprehensive docs")
-  fmt.Println("Updated todo completed status:", updated.Completed)
-
-  // Sort todos by new order
-  err = svc.Sort(ctx, []uuid.UUID{todo.ID})
-  if err != nil {
-    fmt.Println("Failed to sort:", err)
-  }
+    // Fetch and display all todos
+    todos, _ := service.Search(ctx, "")
+    for _, t := range todos {
+        fmt.Printf("- [%v] %s\n", t.Completed, t.Description)
+    }
 }
 ```
 
 ---
 
-## Integration with the System
+## Integration
 
-- **Domain Layer:** Relies on the `domain.TodoRepository` interface which defines operations on `Todo` models.
-- **Handlers:** The Todos Service is consumed by feature HTTP handlers (e.g., [Todos Handler](/internal/features/todos/handler.go)) which expose RESTful endpoints for client interactions.
-- **Repository Implementations:** Currently, an in-memory implementation (`domain.NewTodos()`) is used, but this can be swapped with persistent storage implementations without changing service or handler code.
-- **Context Propagation:** The service methods accept `context.Context` for request-scoped lifecycle control.
+- **Domain Layer:** The service depends on the `domain.TodoRepository` interface to persist and retrieve todo records.
+- **HTTP Handlers:** The service is consumed by HTTP handlers (e.g. `internal/features/todos/handler.go`) that expose endpoints to clients.
+- **Routing:** Handlers that use this service are mounted on routes such as `/todos` and `/todos/{todoId}`.
+- **Testing:** The service logic can be unit tested with mocks of the `TodoRepository` interface using the mock in `internal/domain/mock_todo_repository.go`.
 
-This separation encourages clean architecture principles and makes unit testing straightforward by mocking the `TodoRepository` during service tests.
+Typically, the lifecycle is:
+
+User action (HTTP request) -> HTTP Handler (parses data) -> Todos Service (business logic) -> Domain Repository (data persistence)
+
+This layered architecture enforces separation of concerns and testability.
 
 ---
 
@@ -158,20 +165,18 @@ This separation encourages clean architecture principles and makes unit testing 
 
 ```mermaid
 flowchart TD
-  A[HTTP Handler] -->|calls| B[Todos Service]
-  B -->|delegates to| C[TodoRepository Interface]
-  C -->|implemented by| D[In-Memory Todos Repository]
-  D -->|manages| E[Todo Domain Models]
-  B -->|returns results to| A
+  A[HTTP Client] -->|Sends Request| B[Todos HTTP Handler]
+  B -->|Calls| C[Todos Service]
+  C -->|Delegates| D[Domain TodoRepository]
+  D -->|Manages| E[Todo Data Store]
+
+  B -->|Returns Response| A
 ```
 
 ---
 
-## Source Links
-
-- Service implementation: [internal/features/todos/service.go](/internal/features/todos/service.go)
-- Domain repository interface: [internal/domain/todo_repository.go](/internal/domain/todo_repository.go)
-- Domain model: [internal/domain/todo.go](/internal/domain/todo.go)
-- Handler consuming the service: [internal/features/todos/handler.go](/internal/features/todos/handler.go)
+For more details, see the [source code for Todos Service](internal/features/todos/service.go).
 
 ---
+
+This documentation provides a foundation to understand, use, and integrate the Todos Service within the broader todo application.

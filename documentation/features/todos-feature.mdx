@@ -1,186 +1,186 @@
 ---
 title: 'Todos Feature Overview'
-description: 'Detailed documentation of CRUD, search and sorting operations exposed by the todos feature through its handlers and services with detailed flow diagrams'
+description: 'Detailed documentation of CRUD, search, sorting, and error handling operations exposed by the todos feature through its handlers and services with detailed flow diagrams'
 ---
 
 # Table of Contents
 
-- [Introduction](#introduction)
-- [Key Concepts](#key-concepts)
-- [Core Components](#core-components)
-  - [Domain Layer](#domain-layer)
-  - [Service Layer](#service-layer)
-  - [HTTP Handlers](#http-handlers)
-- [Endpoints](#endpoints)
-- [Integration and Architecture](#integration-and-architecture)
-- [Code Example](#code-example)
-- [Component Interaction Diagram](#component-interaction-diagram)
+- [Overview](#overview)
+- [Domain Model](#domain-model)
+- [Todos Service](#todos-service)
+- [HTTP Handlers](#http-handlers)
+- [Integration in Server](#integration-in-server)
+- [Architecture Diagram](#architecture-diagram)
 
 ---
 
-## Introduction
+## Overview
 
-The **Todos feature** provides the core functionality for managing todo items within the application. It encapsulates the business logic, data operations, and HTTP endpoints necessary to create, read, update, delete, search, and reorder todos.
+The **Todos Feature** encompasses all functionality related to managing todo items within the application. It provides a full-stack implementation allowing users to create, retrieve, update, delete, search, and reorder todo entries.
 
-This feature serves as the main interactive part of the app where users can manage their tasks effectively with a rich set of API endpoints and dynamic UI support (including HTMX integration). It is designed following clean architecture principles to separate concerns clearly among domain models, business logic, and HTTP handling.
+This feature is built around clean separation of concerns:
 
+- **Domain layer:** Defines the core todo models and repositories.
+- **Service layer:** Implements business logic over the domain.
+- **Handler layer:** Exposes HTTP endpoints and handles request/response lifecycles.
 
-## Key Concepts
+This modularity ensures maintainability, testability, and scalability of todo-related functionality.
 
-- **Todo**: The primary data entity representing a task. Includes attributes like ID, description, completion status, and timestamps.
-- **Domain Layer**: Manages the Todo data structure and the repository interface.
-- **Service Layer**: Business logic implementation that works with the domain repository to manipulate todo data.
-- **HTTP Handlers**: Web-layer components that expose RESTful-like HTTP operations supporting CRUD and sorting.
+## Domain Model
 
+The domain model encapsulates the fundamental business entities and their operations:
 
-## Core Components
+- `Todo`: Represents a single todo item with fields like `ID`, `Description`, `Completed` status, and creation timestamp.
+- `Todos`: Manages a collection of `Todo` objects exposing methods such as:
+  - `Add(description string) *Todo`
+  - `Remove(id uuid.UUID)`
+  - `Update(id uuid.UUID, completed bool, description string) *Todo`
+  - `Search(query string) []*Todo`
+  - `Reorder(ids []uuid.UUID) []*Todo`
 
-### Domain Layer
-
-Located in `[internal/domain](internal/domain)`, this layer defines the core **Todo** data model and the **TodoRepository** interface.
-
-- **Todo struct:** contains fields such as `ID`, `Description`, `Completed`, and `CreatedAt`.
-- **Todos container:** manages an ordered list of Todo pointers with methods for adding, removing, updating, searching, and reordering.
-- **TodoRepository interface:** defines contracts for data persistence methods (Add, Remove, Update, Search, Get, All, Reorder).
-
-This layer is persistence agnostic representing the domain model and business rules.
-
-### Service Layer
-
-Located in `[internal/features/todos/service.go](internal/features/todos/service.go)`, the service layer implements business logic by:
-
-- Composing a **TodoRepository** from the domain layer.
-- Providing methods for manipulating todos, including:
-  - Adding new todos.
-  - Removing todos.
-  - Updating todos.
-  - Searching todos.
-  - Reordering todos.
-  - Getting detailed todo information.
-
-The service acts as the core logic provider for HTTP handlers, maintaining separation from transport concerns.
-
-### HTTP Handlers
-
-Located in `[internal/features/todos/handler.go](internal/features/todos/handler.go)`, the handlers: 
-
-- Expose the HTTP endpoints for `/todos` routes.
-- Parse request parameters.
-- Call the service layer methods.
-- Render HTML responses or redirect as needed.
-- Support HTMX to enhance UI by serving partial updates.
-
-Handlers cover endpoints for:
-- Listing and searching todos.
-- Creating new todos.
-- Updating an existing todo.
-- Retrieving a single todo's details.
-- Deleting todos.
-- Reordering todos.
-
-
-## Endpoints
-
-| HTTP Method | Path                     | Description                       |
-|-------------|--------------------------|---------------------------------|
-| GET         | `/todos`                 | List todos, optionally search.  |
-| POST        | `/todos`                 | Create a new todo.               |
-| PATCH       | `/todos/{todoId}`        | Update completed status & text. |
-| POST        | `/todos/{todoId}/edit`   | Alternative update route.        |
-| GET         | `/todos/{todoId}`        | Retrieve todo details.           |
-| DELETE      | `/todos/{todoId}`        | Delete a todo.                   |
-| POST        | `/todos/{todoId}/delete` | Alternative delete route.        |
-| POST        | `/todos/sort`            | Reorder todos by submitted order|
-
-
-## Integration and Architecture
-
-The Todos feature integrates tightly within the overall server architecture:
-
-- **Domain Layer (internal/domain):** Provides the core Todo types and repository interface. Implementation can be in-memory or database-driven.
-- **Feature Services:** (e.g., Todos Service) use the domain repository to encapsulate business behavior.
-- **HTTP Handlers:** register `todos.Mount(router *chi.Mux, handler Handler)` to expose routes under `/todos`.
-- **Server Entry Point:** The main server setup initializes a `domain.Todos` repository instance, creates service and handlers, and mounts routes in the HTTP router.
-
-Dependencies:
-- Uses `github.com/google/uuid` for unique Todo IDs.
-- Uses `github.com/go-chi/chi/v5` for HTTP routing.
-- Deploys internal templates for UI rendering.
-
-This layered structure ensures clear separation of concerns and testability.
-
-
-## Code Example
-
-Here is an example showing how the Todos service interfaces with the domain repository and implements a key operation (adding a new todo):
+The model leverages UUIDs for unique identification and time stamps for creation tracking.
 
 ```go
-package todos
-
 import (
-	"context"
-	"internal/domain"
-	"github.com/google/uuid"
+  "github.com/google/uuid"
+  "time"
 )
 
-// Service defines business operations for todos
-type Service interface {
-	Add(ctx context.Context, description string) (*domain.Todo, error)
-	// Other methods omitted for brevity
+// Todo holds data for an individual task.
+type Todo struct {
+    ID          uuid.UUID
+    Description string
+    Completed   bool
+    CreatedAt   time.Time
 }
 
-// service struct composes a TodoRepository
-type service struct {
-	todos domain.TodoRepository
+// NewTodo creates a new Todo instance.
+func NewTodo(description string) *Todo {
+    return &Todo{
+        ID:          uuid.New(),
+        Description: description,
+        Completed:   false,
+        CreatedAt:   time.Now(),
+    }
 }
 
-// NewService creates Todos service instance
-func NewService(todos domain.TodoRepository) Service {
-	return &service{todos: todos}
-}
-
-// Add adds a new todo via repository
-func (s *service) Add(ctx context.Context, description string) (*domain.Todo, error) {
-	// Delegate to repository
-	newTodo := s.todos.Add(description)
-	return newTodo, nil
+// Update modifies the todo's fields.
+func (t *Todo) Update(completed bool, description string) {
+    t.Completed = completed
+    t.Description = description
 }
 ```
 
+See the full domain source in the [todos.go](/internal/domain/todos.go) and [todo.go](/internal/domain/todo.go) files.
 
-## Component Interaction Diagram
+## Todos Service
+
+The service layer implements the business logic for managing todos, abstracting the repository persistence:
+
+- `Add(ctx, description)`: Create and store a new todo.
+- `Remove(ctx, id)`: Delete a todo by ID.
+- `Update(ctx, id, completed, description)`: Update a todo by ID.
+- `Get(ctx, id)`: Retrieve a todo by ID.
+- `Search(ctx, query)`: Search todos by description.
+- `Sort(ctx, ids)`: Reorder todos according to a list of IDs.
+
+The service depends on the domain's `TodoRepository` interface, allowing flexibility in storage implementations.
+
+Example service construction:
+
+```go
+import "internal/domain"
+
+// NewService creates a todos service using the given repository.
+func NewService(todos domain.TodoRepository) Service {
+    return &service{todos: todos}
+}
+```
+
+Service methods delegate calls to the underlying repository and may apply additional validation or business rules.
+
+See the full implementation: [todos/service.go](/internal/features/todos/service.go)
+
+## HTTP Handlers
+
+HTTP handlers serve as the interface between clients and the service layer. They define routed endpoints under the `/todos` path exposing CRUD and additional operations.
+
+Main handler capabilities:
+
+- `GET /todos`: Retrieve all or searched todos.
+- `POST /todos`: Create a new todo.
+- `PATCH /todos/{todoId}`: Update a todo's completed status and description.
+- `POST /todos/{todoId}/edit`: Alternative update endpoint.
+- `GET /todos/{todoId}`: Retrieve a single todo.
+- `DELETE /todos/{todoId}`: Delete a todo.
+- `POST /todos/sort`: Submit new order for todos.
+
+The handlers integrate HTMX support enabling progressive enhancement with partial HTML rendering.
+
+Example handler snippet (Create endpoint):
+
+```go
+func (h *handler) Create(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, "Bad request", http.StatusBadRequest)
+        return
+    }
+    description := r.PostForm.Get("description")
+    todo, err := h.service.Add(ctx, description)
+    if err != nil {
+        http.Error(w, "Failed to create todo", http.StatusInternalServerError)
+        return
+    }
+    // Render the new todo or redirect
+}
+```
+
+Complete handlers and routing are defined and mounted in [todos/handler.go](/internal/features/todos/handler.go).
+
+## Integration in Server
+
+The Todos feature integrates into the HTTP server entrypoint (`cmd/server/main.go`) as follows:
+
+- Instantiate a new router via `chi.NewRouter()`.
+- Create an in-memory todos list via domain `NewTodos()` and seed default tasks.
+- Build the todos service layer using `todos.NewService()` with the domain todos list.
+- Create the HTTP handler via `todos.NewHandler(service)`.
+- Mount the handlers under `/todos` route with `todos.Mount(router, handler)`.
+- Also mount home page and static asset handlers for a fully functional web app.
+
+This setup allows the server to handle todo-related requests seamlessly, leveraging dependency injection for composing layers.
+
+## Architecture Diagram
 
 ```mermaid
 flowchart TD
-  A[Client Request] --> B(HTTP Handler)
-  B --> C{Action}
-  C -- List/Search --> D[Service.List/Search]
-  C -- Create --> E[Service.Add]
-  C -- Update --> F[Service.Update]
-  C -- Delete --> G[Service.Remove]
-  C -- Reorder --> H[Service.Sort]
-
-  D --> I[Repository.All/Search]
-  E --> I[Repository.Add]
-  F --> I[Repository.Update]
-  G --> I[Repository.Remove]
-  H --> I[Repository.Reorder]
-
-  I --> J[Domain Todos Data]
-  J --> K[Persisted Storage (in-memory/db)]
-
-  B --> L[Render Templates / Partial Updates]
-  L --> M[HTTP Response]
+    A[Client HTTP Request] --> B{Route Dispatcher}
+    B -- /todos --> C[Todos HTTP Handler]
+    C --> D[Todos Service]
+    D --> E[TodoRepository (Domain)]
+    E --> F((In-memory data store))
+    C -.-> G[Render Templates (HTML/HTMX)]
+    B -- / --> H[Home Handler]
+    B -- /dist/* --> I[Static Assets Handler]
 ```
 
+## Summary
+
+The Todos feature provides a comprehensive implementation for todo item management with clearly defined layers:
+
+- **Domain:** Defines core data types and repository interface
+- **Service:** Implements business logic and interacts with domain
+- **Handler:** Handles HTTP requests, responses, and routing
+- **Integration:** Mounted inside the main server router with other features
+
+This layered architecture aids maintainability, testability, and separation of concerns.
 
 ---
 
-For full source code and implementation details, see:
-- [Todos service](internal/features/todos/service.go)
-- [Todos handler](internal/features/todos/handler.go)
-- [Domain todos model](internal/domain/todos.go)
-- [Domain todo model](internal/domain/todo.go)
-- [Todo repository interface](internal/domain/todo_repository.go)
-
-<Check>Understanding the Todos feature is essential as it encapsulates the app's core interactive functionality and demonstrates the structured approach used throughout the codebase.</Check>
+For more details, consult the following sources:
+- [Domain Todos Model](/internal/domain/todos.go)
+- [Todos Service Implementation](/internal/features/todos/service.go)
+- [Todos HTTP Handler](/internal/features/todos/handler.go)
+- [Server Entrypoint](/cmd/server/main.go)
+- [Static Assets Embed](/internal/assets/embed.go)

@@ -3,79 +3,83 @@ title: 'Todos Model'
 description: 'API reference for the Todos struct representing collections of Todo pointers with methods for CRUD, search, reorder and retrieval'
 ---
 
-# Todos Model
-
-The **Todos** model represents a collection of todo items in the application. It encapsulates a list of individual `Todo` entities and provides methods to manipulate this list including creation, retrieval, update, removal, searching, and reordering of todos.
-
-This model acts as a core domain abstraction managing in-memory todo data and serves as the backbone of todo-related features in the system.
-
----
-
-## Table of Contents
+# Table of Contents
 
 - [Overview](#overview)
-- [Todos Type and Structure](#todos-type-and-structure)
-- [Key Methods](#key-methods)
-- [Code Example](#code-example)
-- [Integration Details](#integration-details)
-- [Mermaid Diagram](#mermaid-diagram)
+- [Todos Model](#todos-model)
+  - [Definition](#definition)
+  - [Core Methods](#core-methods)
+- [Usage Examples](#usage-examples)
+- [Integration and Architecture](#integration-and-architecture)
+- [Mermaid Diagram: Todos Model Interactions](#mermaid-diagram-todos-model-interactions)
 - [Reference](#reference)
 
 ---
 
 ## Overview
 
-The `Todos` model is designed to manage a mutable collection of `Todo` items. Each `Todo` represents a single task with properties such as an ID, description, completion status, and creation timestamp.
+The **Todos Model** represents the core domain concept that manages a collection of todo items within the application. It encapsulates the representation and behavior of a list of todo tasks, providing methods to add new todos, update existing ones, remove them, reorder the list, and perform search queries.
 
-`Todos` provides convenient methods to:
+Serving as a fundamental building block of the Todo application, this model abstracts the in-memory management of the collection, supporting safe and clean operations on todos in the system.
 
-- Add new items
-- Remove by unique ID
-- Update existing todos
-- Search within descriptions
-- Retrieve all or specific items
-- Reorder the list based on a new order of IDs
-
-This abstraction is primarily used internally by the domain layer and is leveraged by services and handlers to manage todo state.
+[See the source implementation here](internal/domain/todos.go).
 
 ---
 
-## Todos Type and Structure
+## Todos Model
 
-- **Type:** `Todos`
-- **Underlying data:** Slice of pointers to `Todo` (`[]*Todo`)
+### Definition
 
-The `Todos` type contains an internal slice that holds references to `Todo` pointers.
+The Todos Model is implemented via the `Todos` type, which is essentially a slice of pointers to `Todo` structs.
 
-Each `Todo` includes:
+```go
+// Todos represents a list of Todo pointers
+// It provides methods to manipulate the underlying todo list.
+type Todos []*Todo
 
-- `ID`: a unique identifier (UUID)
-- `Description`: a textual description of the task
-- `Completed`: boolean indicating completion status
-- `CreatedAt`: timestamp of creation
+// NewTodos creates and returns an empty Todos list.
+func NewTodos() *Todos {
+  t := Todos{}
+  return &t
+}
+
+// Todos() returns the underlying slice of Todo pointers.
+func (t *Todos) Todos() []*Todo {
+  return *t
+}
+```
+
+`Todo` is the fundamental entity with fields such as `ID` (UUID), `Description`, `Completed`, and `CreatedAt` timestamp.
+
+### Core Methods
+
+The `Todos` struct provides several important methods:
+
+- **Add**: Add a new todo to the list with a description.
+
+  ```go
+  func (t *Todos) Add(description string) *Todo {
+    todo := NewTodo(description) // Creates a new Todo with unique ID
+    *t = append(*t, todo)
+    return todo
+  }
+  ```
+
+- **Remove**: Remove a todo by its UUID.
+
+- **Update**: Update the completed status and description of a todo identified by UUID.
+
+- **Search**: Search todos by matching descriptions containing a substring.
+
+- **Get**: Retrieve a todo by its UUID.
+
+- **Reorder**: Rearrange the todos based on a slice of UUIDs representing the new order.
+
+Each method internally ensures the integrity of the list and returns appropriate values, such as the updated `*Todo` or a list of matched todos.
 
 ---
 
-## Key Methods
-
-Here are the primary methods provided by the `Todos` model:
-
-| Method                                              | Description                                                           |
-|-----------------------------------------------------|-----------------------------------------------------------------------|
-| `NewTodos() *Todos`                                 | Creates and returns an empty Todos instance.                          |
-| `(t *Todos) Add(description string) *Todo`          | Adds a new Todo with the provided description and returns it.        |
-| `(t *Todos) Remove(id uuid.UUID)`                    | Removes the Todo identified by the given ID.                         |
-| `(t *Todos) Update(id uuid.UUID, completed bool, description string) *Todo` | Updates the completion status and description of the Todo with the given ID. |
-| `(t *Todos) Search(search string) []*Todo`          | Returns a slice of Todos matching the search string in their description. |
-| `(t *Todos) All() []*Todo`                           | Returns all Todos in the current list.                                |
-| `(t *Todos) Get(id uuid.UUID) *Todo`                 | Retrieves the Todo by ID if it exists.                                |
-| `(t *Todos) Reorder(ids []uuid.UUID) []*Todo`        | Reorders Todos according to the given list of IDs.                   |
-
-The underlying implementation ensures efficient manipulation and querying of the todo list.
-
----
-
-## Code Example
+## Usage Examples
 
 ```go
 package main
@@ -87,94 +91,94 @@ import (
 )
 
 func main() {
-  todos := domain.NewTodos() // Create new Todos list
+  todos := domain.NewTodos()
 
   // Add todos
   todo1 := todos.Add("Buy groceries")
-  todo2 := todos.Add("Schedule meeting")
+  todo2 := todos.Add("Clean the house")
 
-  fmt.Println("All Todos:")
-  for _, t := range todos.All() {
-    fmt.Printf("- %s (Completed: %v)\n", t.Description, t.Completed)
-  }
+  // Update todo
+  updatedTodo := todos.Update(todo1.ID, true, "Buy groceries and cook dinner")
+  fmt.Println("Updated Todo:", updatedTodo)
 
-  // Update todo1
-  todos.Update(todo1.ID, true, "Buy groceries and snacks")
+  // Search todos
+  results := todos.Search("clean")
+  fmt.Printf("Search results: %d
+", len(results))
 
-  // Search todos containing "meeting"
-  found := todos.Search("meeting")
-  fmt.Printf("\nSearch 'meeting' found %d todo(s).\n", len(found))
-
-  // Remove todo2
+  // Remove a todo
   todos.Remove(todo2.ID)
+
+  // List all todos
+  all := todos.Todos()
+  fmt.Printf("Total todos: %d
+", len(all))
 }
 ```
 
-_Comments:_
-- `NewTodos` initializes the todo list.
-- Using `Add` to create new entries.
-- Updates use `Update` with the todo's UUID.
-- Search filters based on description text.
-- Remove deletes by UUID.
+---
+
+## Integration and Architecture
+
+The Todos Model serves as the **domain model** in the application architecture. It primarily resides under the `internal/domain` package and acts as the source of truth for todo entities.
+
+- The **Service layer** (e.g., `internal/features/todos/service.go`) depends on the `Todos` model to perform business logic such as adding, updating, and retrieving todos.
+
+- The **Handlers** (e.g., `internal/features/todos/handler.go`) interact with Services, which ultimately manipulate the Todos model.
+
+- The **Persistence layer** is abstracted by interfaces like `TodoRepository`, which the Todos model implements or interfaces with.
+
+- The **Web server** (`cmd/server/main.go`) initializes and injects a Todos instance into services to bootstrap application state.
+
+This layered approach ensures separation of concerns:
+
+- The Todos model is responsible solely for the in-memory representation and manipulation of todo items.
+- Services contain business rules.
+- Handlers manage HTTP request/response cycles.
+
+The model’s design facilitates testability and maintainability by cleanly encapsulating data transformations within domain logic.
 
 ---
 
-## Integration Details
-
-- **Location in Project:** The Todos model is implemented in the domain layer at `[internal/domain/todos.go](/internal/domain/todos.go)`.
-
-- **Interactions:**
-  - Used by service layers such as the `todos.Service` and `home.Service` to perform business logic operations.
-  - Controllers/handlers invoke service methods which internally interact with the `Todos` model to manipulate todo data.
-  - The domain model abstracts state and persistence concerns, enabling separation from transport and UI layers.
-
-- **Dependencies:**
-  - Relies on the `Todo` struct defined in `[internal/domain/todo.go](/internal/domain/todo.go)`.
-  - Uses UUIDs from `github.com/google/uuid` for unique identification.
-
-- **Responsibility:**
-  - Manage the lifecycle of todo entities in memory.
-  - Provide consistent access and mutation methods.
-  - Support querying like search and reordering.
-
-This modular design enables clear separation of concerns and extensibility.
-
----
-
-## Mermaid Diagram
+## Mermaid Diagram: Todos Model Interactions
 
 ```mermaid
 flowchart TD
-  A[NewTodos()] --> B[Todos instance]
-  B --> C[Add(description)]
-  B --> D[Remove(id)]
-  B --> E[Update(id, completed, description)]
-  B --> F[Search(searchTerm)]
-  B --> G[All()]
-  B --> H[Get(id)]
-  B --> I[Reorder(ids)]
-
-  subgraph Todo Entity
-    C -.Creates.-> J[Todo]
-    E -.Modifies.-> J
-    H -.Retrieves.-> J
+  subgraph Domain Layer
+    todos(Todos Model)
+    todo(Todo Entity)
   end
 
-  style Todo Entity fill:#f9f,stroke:#333,stroke-width:1px
-```
+  subgraph Service Layer
+    service(Todos Service)
+  end
 
-This diagram illustrates primary methods of `Todos` and their relationship with `Todo` entities.
+  subgraph Handler Layer
+    handler(Todos Handler)
+  end
+
+  handler -->|calls| service
+  service -->|manages| todos
+  todos -->|contains| todo
+  service -- persists/queries --> TodoRepository[Todo Repository Interface]
+
+  TodoRepository -.-> todos
+
+  noteOver todos,service [Todos model manages domain logic such as Add, Remove, Update, Search]
+```
 
 ---
 
 ## Reference
 
-- Implementation file: [internal/domain/todos.go](/internal/domain/todos.go)
-- Todo definition: [internal/domain/todo.go](/internal/domain/todo.go)
-- Service usage example: [internal/features/todos/service.go](/internal/features/todos/service.go)
+- [Todos Model source file](internal/domain/todos.go)
+- [Todo Entity definition](internal/domain/todo.go)
+- [TodoRepository Interface](internal/domain/todo_repository.go)
+- [Todos Service](internal/features/todos/service.go)
+- [Todos Handler](internal/features/todos/handler.go)
 
 ---
 
-For tests and mock implementation related to `Todos`, see:
-- Test file: [internal/domain/todo_test.go](/internal/domain/todo_test.go)
-- Mock repository: [internal/domain/mock_todo_repository.go](/internal/domain/mock_todo_repository.go)
+<Note>
+The Todos model is designed for in-memory management during server runtime. Extending persistence or sharing state across servers requires implementing the TodoRepository interface backed by a durable store.
+</Note>

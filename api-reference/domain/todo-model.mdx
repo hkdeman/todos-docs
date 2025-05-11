@@ -3,150 +3,194 @@ title: 'Todo Model'
 description: 'API reference for the Todo struct defining task properties and methods including creation and update'
 ---
 
-# Todo Model
-
-The **Todo Model** is a core domain component representing individual task items within the Todo application. It encapsulates the data structure and behaviors related to a task, such as its unique identifier, description, completion status, and creation timestamp.
-
-This model serves as the foundational building block for managing todos, enabling other layers like the service and handler layers to perform operations such as creation, update, retrieval, and deletion while maintaining domain integrity.
-
----
-
-## Table of Contents
+# Table of Contents
 
 - [Overview](#overview)
-- [Todo Struct](#todo-struct)
-- [Creating a New Todo](#creating-a-new-todo)
-- [Updating a Todo](#updating-a-todo)
-- [Integration Details](#integration-details)
-- [Mermaid Diagram](#mermaid-diagram)
-- [References](#references)
+- [The Todo Struct](#the-todo-struct)
+- [Creating and Updating Todos](#creating-and-updating-todos)
+- [Todos Collection](#todos-collection)
+- [Key Methods of Todos](#key-methods-of-todos)
+- [Integration and Architecture](#integration-and-architecture)
+- [Example Usage](#example-usage)
 
 ---
 
 ## Overview
 
-The Todo Model captures the state and data associated with a single todo item. Each Todo has:
+The **Todo model** is the core domain entity representing a task item in the application. It encapsulates the essential data and behaviors associated with a todo item, such as its unique identifier, description, completion status, and creation timestamp.
 
-- A **UUID** as a unique identifier.
-- A **Description** string for the task details.
-- A **Completed** boolean flag indicating whether the task is done.
-- A **CreatedAt** timestamp recording when the todo was created.
+Alongside the individual Todo struct, the `Todos` type manages a collection of Todo objects and provides methods for adding, removing, updating, searching, and reordering these items. This modeling approach enables clean domain logic encapsulation and serves as the foundational building block for higher layers like services and handlers.
 
-These fields allow the application to handle todos consistently across the domain, service, and presentation layers.
+The Todo model is implemented in the domain layer at [`internal/domain/todo.go`](/internal/domain/todo.go) and [`internal/domain/todos.go`](/internal/domain/todos.go).
 
-## Todo Struct
+## The Todo Struct
 
-The primary data structure is the `Todo` struct defined as follows:
+The `Todo` struct represents a single task with the following fields:
+
+- `ID` (uuid.UUID): A unique identifier for each Todo.
+- `Description` (string): The textual content or description of the task.
+- `Completed` (bool): A flag indicating if the task is done.
+- `CreatedAt` (time.Time): Timestamp marking when the todo was created.
 
 ```go
-package domain
-
 import (
-	"time"
-	"github.com/google/uuid"
+  "time"
+  "github.com/google/uuid"
 )
 
-// Todo represents a task item
-// with an ID, description, completion status, and creation time.
+// Todo represents a task item.
 type Todo struct {
-	ID          uuid.UUID
-	Description string
-	Completed   bool
-	CreatedAt   time.Time
+  ID          uuid.UUID
+  Description string
+  Completed   bool
+  CreatedAt   time.Time
 }
-```
 
-This struct is immutable except through its methods, supporting encapsulation of todo state.
-
-## Creating a New Todo
-
-The model provides a constructor function to create new todo items:
-
-```go
-// NewTodo creates a new Todo with a unique ID
-// and the provided description.
+// NewTodo creates a new Todo with a unique ID and current timestamp.
 func NewTodo(description string) *Todo {
-	return &Todo{
-		ID:          uuid.New(),
-		Description: description,
-		Completed:   false,
-		CreatedAt:   time.Now(),
-	}
+  return &Todo{
+    ID:          uuid.New(),
+    Description: description,
+    Completed:   false,
+    CreatedAt:   time.Now(),
+  }
+}
+
+// Update modifies the todo's completed status and description.
+func (t *Todo) Update(completed bool, description string) {
+  t.Completed = completed
+  t.Description = description
 }
 ```
 
-Use this function when adding new todos to ensure proper initialization with a unique ID and timestamp.
+## Creating and Updating Todos
 
-## Updating a Todo
+- **Creating a Todo:** Use `NewTodo` to instantiate a new todo with a fresh UUID and creation time.
+- **Updating a Todo:** The `Update` method modifies the `Completed` status and `Description` in one call.
 
-The Todo model exposes an `Update` method to modify the completed status and description atomically:
+This encapsulation promotes immutability of the non-mutable fields like ID and CreatedAt, while allowing state changes on mutable fields.
+
+## Todos Collection
+
+The `Todos` type manages a list of pointers to Todo structs. This collection is responsible for all operations over sets of todos.
 
 ```go
-// Update modifies the Completed and Description fields
-// returns a pointer to the updated Todo.
-func (t *Todo) Update(completed bool, description string) *Todo {
-	t.Completed = completed
-	t.Description = description
-	return t
+// Todos represents a list of todo pointers.
+type Todos []*Todo
+
+// NewTodos creates an empty Todos collection.
+func NewTodos() *Todos {
+  t := make(Todos, 0)
+  return &t
 }
 ```
 
-This method simplifies updating a todo and guarantees state consistency.
+## Key Methods of Todos
 
----
+`Todos` exposes several methods supporting typical operations:
 
-## Integration Details
+| Method                     | Description                                              |
+|----------------------------|----------------------------------------------------------|
+| `Add(description string)`   | Adds a new todo with the given description.              |
+| `Remove(id uuid.UUID)`      | Removes the todo matching the given ID.                   |
+| `Update(id uuid.UUID, completed bool, description string)` | Updates a todo's completed state and description.  |
+| `Search(search string)`     | Finds todos containing the search text (case-insensitive).|
+| `All()`                    | Returns all todos in the current order.                   |
+| `Get(id uuid.UUID)`         | Retrieves a todo by its ID.                               |
+| `Reorder(ids []uuid.UUID)`  | Reorders the todos to match the given list of IDs.       |
 
-### Role in Application Architecture
+### Example - Add method snippet:
 
-- **Domain Layer:** The Todo model lives in the domain layer (`internal/domain/todo.go`), encapsulating business data and rules.
-- **Persistence & Repository:** Interacts with the `TodoRepository` interface, which manages storage and retrieval.
-- **Service Layer:** The Todos Service (`internal/features/todos/service.go`) uses this model to apply business logic and state changes.
-- **Handler Layer:** HTTP handlers consume this model to read, display, and manipulate task data.
+```go
+func (t *Todos) Add(description string) *Todo {
+  newTodo := NewTodo(description)   // Create new Todo instance
+  *t = append(*t, newTodo)          // Append to the underlying slice
+  return newTodo
+}
+```
 
-### Dependencies
+### Searching todos example:
 
-- [`github.com/google/uuid`](https://pkg.go.dev/github.com/google/uuid) for generating unique identifiers.
-- Standard Go `time` package for timestamps.
+```go
+func (t *Todos) Search(search string) []*Todo {
+  if search == "" {
+    return t.All() // Return all if no search term
+  }
+  search = strings.ToLower(search)
+  var filtered []*Todo
+  for _, todo := range *t {
+    if strings.Contains(strings.ToLower(todo.Description), search) {
+      filtered = append(filtered, todo)
+    }
+  }
+  return filtered
+}
+```
 
-### Interaction Flow
+## Integration and Architecture
+
+The Todo model lives in the domain layer and forms the foundational data structure for todo management. It is independent of transport or persistence logic but interfaces closely with:
+
+- **TodoRepository Interface (`internal/domain/todo_repository.go`):** Abstracts persistence of Todos.
+- **Services in features (`internal/features/todos/service.go`):** Implement business logic on top of `Todos` or the repository.
+- **Handlers in features (`internal/features/todos/handler.go`):** Expose APIs using the service layer with Todo data.
+
+The diagram below illustrates the main relationships:
 
 ```mermaid
 flowchart TD
-  TodoModel[Todo Model]
-  Service[Todos Service]
-  Repository[TodoRepository]
-  Handler[HTTP Handler]
+  TodoModel["Todo Model\n(internal/domain/todo.go)"] -->|Used by| TodosCollection["Todos Collection\n(internal/domain/todos.go)"]
+  TodosCollection -->|Implements| TodoRepository["TodoRepository Interface\n(internal/domain/todo_repository.go)"]
+  TodoRepository -->|Used by| TodoService["Todos Service Layer\n(internal/features/todos/service.go)"]
+  TodoService -->|Used by| TodoHandler["Todos Handler Layer\n(internal/features/todos/handler.go)"]
 
-  Handler -->|calls| Service
-  Service -->|uses| TodoModel
-  Service -->|calls| Repository
-  Repository -->|returns| TodoModel
-  TodoModel -->|methods| Update
+  subgraph Domain Layer
+    TodoModel
+    TodosCollection
+    TodoRepository
+  end
+  subgraph Feature Layer
+    TodoService
+    TodoHandler
+  end
 ```
 
-- Handlers receive requests and invoke service methods.
-- Services manipulate Todo model instances and delegate persistence.
-- Repositories implement storage of todos.
+## Example Usage
 
-This pattern enforces separation of concerns and maintains a clean architecture.
+Here is a minimal example demonstrating creation and manipulation of todos:
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/google/uuid"
+	"internal/domain"
+)
+
+func main() {
+  todos := domain.NewTodos()                      // Initialize empty Todos collection
+  todo := todos.Add("Write documentation")     // Add a new todo
+
+  fmt.Println(todo.ID, todo.Description, todo.Completed)
+
+  // Update the todo
+  todos.Update(todo.ID, true, "Write complete docs")
+
+  // Search todos
+  results := todos.Search("docs")
+  for _, t := range results {
+    fmt.Println(t.Description, "Completed?", t.Completed)
+  }
+}
+```
 
 ---
 
-## References
+For the implementation details, you can explore the source code files:
 
-- View source code:
-  - [Todo Struct and Methods](internal/domain/todo.go)
-  - [Todos Collection Model](internal/domain/todos.go)
-  - [Todos Service Layer](internal/features/todos/service.go)
-  - [TodoRepository Interface](internal/domain/todo_repository.go)
+- [`internal/domain/todo.go`](internal/domain/todo.go)
+- [`internal/domain/todos.go`](internal/domain/todos.go)
+- [`internal/domain/todo_repository.go`](internal/domain/todo_repository.go)
 
----
-
-For testing and mocking, see:
-- [MockTodoRepository](internal/domain/mock_todo_repository.go)
-- [Domain Layer Testing](internal/domain/todo_test.go)
-
----
-
-This completes the overview of the core Todo model within the system, illustrating its design, usage, and architectural role.
+This model forms the backbone of todo management and is leveraged throughout application layers.

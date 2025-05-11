@@ -3,47 +3,56 @@ title: 'Domain Model'
 description: 'Detailed explanation of the core domain models Todo and Todos with diagrams showing relationships and lifecycle including creation, update and search capabilities'
 ---
 
-# Domain Model
+# Table of Contents
 
-The Domain Model layer represents the core business objects and rules of the application. It encapsulates the data structures and operations that directly model the problem domain — in this case, a todo list management system.
-
-This layer is responsible for defining the **Todo** entity, collections of todos (**Todos**), and the abstract contract for persistence via **TodoRepository**. It is the foundational layer upon which the service and handler layers build.
-
----
-
-## Table of Contents
-
-- [Todo Entity](#todo-entity)
-- [Todos Collection](#todos-collection)
+- [Overview](#overview)
+- [Domain Models](#domain-models)
+  - [Todo](#todo)
+  - [Todos](#todos)
 - [TodoRepository Interface](#todorepository-interface)
 - [Integration and Usage](#integration-and-usage)
-- [Domain Model Interaction Diagram](#domain-model-interaction-diagram)
+- [Domain Model Flow](#domain-model-flow)
 
 ---
 
-## Todo Entity
+## Overview
 
-The `Todo` struct defines the shape of a basic todo item within the application.
+The **Domain Model** encapsulates the core business logic and state of the application related to managing todo tasks. This layer focuses on the fundamental **Todo** entity, collections of todos, and the contract (interface) for interacting with todo storage and manipulation.
 
-### Key fields:
-- `ID` (uuid.UUID): A unique identifier for the todo.
-- `Description` (string): Text description of the task.
-- `Completed` (bool): Completion status.
-- `CreatedAt` (time.Time): Timestamp when the todo was created.
+The domain model abstracts away infrastructural details, providing a clean, behavior-rich API that upper layers (services, handlers) can use to implement application features. It ensures data consistency and enforces business rules around todos.
 
-### Primary operations:
-- **NewTodo**: Creates a new Todo instance with a fresh UUID and sets default fields.
-- **Update**: Modifies the todo’s completed status and description.
+This documentation explains the main domain types, their responsibilities, interactions, and integration within the system.
 
-### Code Example
+---
+
+## Domain Models
+
+### Todo
+
+The `Todo` struct represents a single task with key properties and operations:
+
+- **ID**: A unique identifier (`uuid.UUID`) for the todo.
+- **Description**: A string describing the task.
+- **Completed**: Boolean flag denoting if the task is done.
+- **CreatedAt**: Timestamp when the todo was created.
+
+#### Key Methods
+
+- `NewTodo(description string) *Todo`
+  - Creates a new todo instance with a unique ID and current timestamp.
+
+- `Update(completed bool, description string)`
+  - Updates the completed status and description of the todo.
 
 ```go
+package domain
+
 import (
-  "time"
   "github.com/google/uuid"
+  "time"
 )
 
-// Todo represents a task item
+// Todo represents a task entity
 type Todo struct {
   ID          uuid.UUID
   Description string
@@ -51,7 +60,7 @@ type Todo struct {
   CreatedAt   time.Time
 }
 
-// NewTodo creates a Todo with a new UUID and current time
+// NewTodo creates a new Todo with a unique ID and timestamps
 func NewTodo(description string) *Todo {
   return &Todo{
     ID:          uuid.New(),
@@ -61,159 +70,260 @@ func NewTodo(description string) *Todo {
   }
 }
 
-// Update modifies completion status and description
+// Update changes the todo's completed status and description
 func (t *Todo) Update(completed bool, description string) {
   t.Completed = completed
   t.Description = description
 }
 ```
 
-Source: [internal/domain/todo.go](/internal/domain/todo.go)
-
 ---
 
-## Todos Collection
+### Todos
 
-`Todos` represents an ordered in-memory collection of pointers to `Todo` objects. This type provides convenient methods to manage todo items collectively.
+`Todos` represents a collection of `Todo` items. It provides methods for common list operations including:
 
-### Responsibilities:
+- Add new todos
+- Remove todos by ID
+- Update existing todos
+- Search todos by text query
+- Retrieve all todos
+- Reorder todos by a specified ID order
 
-- Creating a new `Todos` collection.
-- Adding a new todo (`Add`).
-- Removing a todo by ID (`Remove`).
-- Updating a todo (`Update`).
-- Searching todos by text query (`Search`).
-- Retrieving all todos (`All`).
-- Reordering todos based on a new ID sequence (`Reorder`).
+#### Key Methods
 
-### Important Notes:
-- This collection abstracts typical list operations so services and handlers interact with a higher level API rather than directly managing todo pointers.
-- Methods return the updated or manipulated `Todo` or filtered slices of `Todo` pointers.
+- `NewTodos() *Todos`
+  - Creates a new empty todos list.
 
-### Code Snippet
+- `(t *Todos) Add(description string) *Todo`
+  - Adds a new todo with the given description.
+
+- `(t *Todos) Remove(id uuid.UUID)`
+  - Removes the todo matching the given ID.
+
+- `(t *Todos) Update(id uuid.UUID, completed bool, description string) *Todo`
+  - Updates a todo by ID.
+
+- `(t *Todos) Search(query string) []*Todo`
+  - Returns todos matching the search query.
+
+- `(t *Todos) All() []*Todo`
+  - Returns all todos.
+
+- `(t *Todos) Get(id uuid.UUID) *Todo`
+  - Retrieves a single todo by ID.
+
+- `(t *Todos) Reorder(ids []uuid.UUID) []*Todo`
+  - Reorders todos based on the given ID slice.
 
 ```go
-// Todos is a list of Todo pointers
+package domain
+
+// Todos is a collection of Todo pointers
 type Todos struct {
   list []*Todo
 }
 
-// NewTodos initializes a Todos collection
+// NewTodos creates an empty Todos list
 func NewTodos() *Todos {
   return &Todos{list: []*Todo{}}
 }
 
-// Add creates and appends a new todo
+// Add appends a new Todo to the list
 func (t *Todos) Add(description string) *Todo {
   todo := NewTodo(description)
   t.list = append(t.list, todo)
   return todo
 }
 
-// Remove deletes a todo by ID
+// Remove deletes a Todo by ID
 func (t *Todos) Remove(id uuid.UUID) {
   index := t.indexOf(id)
-  if index != -1 {
-    t.list = append(t.list[:index], t.list[index+1:]...)
+  if index < 0 {
+    return
   }
+  t.list = append(t.list[:index], t.list[index+1:]...)
 }
 
-// A condensed view of other methods omitted for brevity
-```
+// Update modifies a Todo by ID
+func (t *Todos) Update(id uuid.UUID, completed bool, description string) *Todo {
+  todo := t.Get(id)
+  if todo == nil {
+    return nil
+  }
+  todo.Update(completed, description)
+  return todo
+}
 
-Source: [internal/domain/todos.go](/internal/domain/todos.go)
+// Search returns todos containing the query in their description
+func (t *Todos) Search(search string) []*Todo {
+  result := []*Todo{}
+  for _, todo := range t.list {
+    if strings.Contains(strings.ToLower(todo.Description), strings.ToLower(search)) {
+      result = append(result, todo)
+    }
+  }
+  return result
+}
+
+// All returns all todos
+func (t *Todos) All() []*Todo {
+  return t.list
+}
+
+// Get finds a todo by id
+func (t *Todos) Get(id uuid.UUID) *Todo {
+  for _, todo := range t.list {
+    if todo.ID == id {
+      return todo
+    }
+  }
+  return nil
+}
+
+// Reorder rearranges todos to match the order of ids
+func (t *Todos) Reorder(ids []uuid.UUID) []*Todo {
+  reordered := []*Todo{}
+  for _, id := range ids {
+    todo := t.Get(id)
+    if todo != nil {
+      reordered = append(reordered, todo)
+    }
+  }
+  t.list = reordered
+  return reordered
+}
+
+// indexOf returns the index of a todo by id
+func (t *Todos) indexOf(id uuid.UUID) int {
+  for i, todo := range t.list {
+    if todo.ID == id {
+      return i
+    }
+  }
+  return -1
+}
+```
 
 ---
 
 ## TodoRepository Interface
 
-The `TodoRepository` interface abstracts data persistence for todo items. It defines the contract any storage backend must fulfill to manage `Todo` entities.
+The `TodoRepository` interface defines an abstraction over the persistence mechanism for todos. It ensures that the domain model can interact with any data store in a consistent way.
 
-### Methods:
+This interface includes methods for:
 
-| Method        | Signature                                             | Description                                  |
-|---------------|-------------------------------------------------------|----------------------------------------------|
-| `Add`         | `Add(description string) *Todo`                       | Adds a new todo                              |
-| `Remove`      | `Remove(id uuid.UUID)`                                | Removes a todo by its ID                      |
-| `Update`      | `Update(id uuid.UUID, completed bool, description string) *Todo` | Updates a todo                              |
-| `Search`      | `Search(search string) []*Todo`                       | Returns todos matching the search criteria  |
-| `All`         | `All() []*Todo`                                       | Returns all todos                            |
-| `Get`         | `Get(id uuid.UUID) *Todo`                             | Retrieves a todo by ID                        |
-| `Reorder`     | `Reorder(ids []uuid.UUID) []*Todo`                    | Reorders todos by a list of IDs              |
+- Adding todos
+- Removing todos by ID
+- Updating todos
+- Searching by text
+- Retrieving all todos
+- Getting a specific todo by ID
+- Reordering todos
 
-### Purpose:
-- Provide abstraction over storage (in-memory, database, etc.)
-- Allow service layers to operate independently of persistence details
+```go
+package domain
 
-Source: [internal/domain/todo_repository.go](/internal/domain/todo_repository.go)
+import "github.com/google/uuid"
+
+// TodoRepository defines methods to manage todo persistence
+type TodoRepository interface {
+  Add(description string) *Todo
+  Remove(id uuid.UUID)
+  Update(id uuid.UUID, completed bool, description string) *Todo
+  Search(search string) []*Todo
+  All() []*Todo
+  Get(id uuid.UUID) *Todo
+  Reorder(ids []uuid.UUID) []*Todo
+}
+```
+
+This separation allows the rest of the application to depend solely on the interface rather than concrete implementations.
 
 ---
 
 ## Integration and Usage
 
-The Domain Model integrates with the broader system as follows:
+The domain model acts as the core logic layer for todo management. It is typically used by **services** which implement business logic and by **handlers** that expose HTTP endpoints.
 
-- **Service Layer**: Composes the `TodoRepository` interface to perform business logic by leveraging domain operations.
-  - Home and Todos features rely on domain models to query, update, and reorder todos.
-- **Handlers**: Call services which depend on domain models to fetch and manipulate todo data, preparing responses.
-- **Repositories / Backend**: Concrete implementations of `TodoRepository` fulfill persistence details.
+### Integration Highlights:
 
-### Key Dependencies:
+- The domain's `Todos` type can be used as an **in-memory repository** for simple cases.
+- More complex repositories can implement the `TodoRepository` interface using databases or other storage.
+- Services consume the repository interface to provide business use cases like listing, updating, and sorting todos.
+- HTTP handlers invoke service methods, passing user input down to domain logic.
 
-- `github.com/google/uuid` for unique identifiers.
-- `time` package for timestamps.
-
-### Typical Flow:
+### Dependency Graph (Simplified)
 
 ```mermaid
 flowchart TD
-  UserRequest[User HTTP Request] --> Handler[HTTP Handler]
-  Handler --> Service[Service Layer]
-  Service --> Repo[TodoRepository Interface]
-  Repo --> DomainModel[Todo / Todos Entities]
-  DomainModel --> Repo
-  Repo --> PersistentStorage[(Data Storage)]
+  Repository["TodoRepository Interface"]
+  Todos["Todos (In-memory)"
+   (implements TodoRepository)]
+  Service["Todos Service"]
+  Handler["Todos Handler"]
+  User["User/Client"]
 
-  Handler --> Response[HTTP Response]
+  User -->|HTTP Requests| Handler
+  Handler -->|Calls| Service
+  Service -->|Uses| Repository
+  Todos -->|Implements| Repository
 ```
 
-This flow highlights the Domain Model as the defining structure upon which business logic and storage interactions depend.
+### Example Usage in Application Setup (go)
+
+```go
+list := domain.NewTodos()
+list.Add("Buy milk")
+list.Add("Read book")
+
+svc := todos.NewService(list) // service depends on domain.TodoRepository
+handler := todos.NewHandler(svc) // handler uses service
+
+// Mount handler routes and start server...
+```
+
+For full details on this integration, see the [server main entrypoint](cmd/server/main.go).
 
 ---
 
-## Domain Model Interaction Diagram
+## Domain Model Flow
 
 ```mermaid
 flowchart TD
-  TodoEntity[Todo Entity]
-  TodosCollection[Todos Collection]
-  TodoRepo[TodoRepository Interface]
+  Start((Start))
+  CreateNewTodo["Create New Todo
+NewTodo(description string)"]
+  AddToList["Add Todo to Todos list
+Todos.Add(description string)"]
+  UpdateTodo["Update Todo
+Update(completed, desc string)"]
+  SearchTodos["Search Todos
+Todos.Search(search string)"]
+  RetrieveAll["Retrieve All Todos
+Todos.All()"]
 
-  TodoEntity --> |"Managed by"| TodosCollection
-  TodosCollection --> |"Persisted via"| TodoRepo
-
-  subgraph Layer
-    direction TB
-    TodoRepo
-  end
-
-  TodoRepo -.-> PersistentStorage[(Database / Memory)]
-
-  HomeService --> TodoRepo
-  TodosService --> TodoRepo
-
-  HomeHandler --> HomeService
-  TodosHandler --> TodosService
+  Start --> CreateNewTodo
+  CreateNewTodo --> AddToList
+  AddToList --> UpdateTodo
+  UpdateTodo --> SearchTodos
+  SearchTodos --> RetrieveAll
 ```
 
-This diagram shows how the domain models (`Todo`, `Todos`) are encapsulated by the repository interface and connected upward to the service and handler layers.
+This flow shows the lifecycle of a todo from creation, addition to the list, potential updates, searching, and retrieving all todos.
 
 ---
 
-## See Also
-- [Todo Model](../API%20Reference/Domain%20Layer/Todo%20Model.md)
-- [Todos Model](../API%20Reference/Domain%20Layer/Todos%20Model.md)
-- [TodoRepository Interface](../API%20Reference/Domain%20Layer/TodoRepository%20Interface.md)
-- [Service Layer Architecture](../Architecture/Service%20Layer%20Architecture.md)
+## Related Links
+
+- [Todo Model](internal/domain/todo.go)
+- [Todos Model](internal/domain/todos.go)
+- [TodoRepository Interface](internal/domain/todo_repository.go)
+- [Todos Service Layer](internal/features/todos/service.go)
+- [Todos HTTP Handler](internal/features/todos/handler.go)
 
 ---
+
+<Note>
+The domain layer is designed to be independent and free from infrastructural concerns, promoting clean architecture principles and ease of testing.
+</Note>

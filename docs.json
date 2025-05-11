@@ -1,6 +1,4 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "theme": "almond",
   "name": "Docucod",
   "colors": {
     "primary": "#60A5FA",
@@ -13,7 +11,7 @@
     "codeblocks": "dark"
   },
   "icons": {
-    "library": "lucide"
+    "library": "fontawesome"
   },
   "fonts": {
     "family": "Montserrat",

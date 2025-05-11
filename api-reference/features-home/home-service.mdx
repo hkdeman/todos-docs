@@ -6,137 +6,105 @@ description: 'Public APIs and implementation details of the home.Service interfa
 # Table of Contents
 
 - [Introduction](#introduction)
-- [Service Interface and Implementation](#service-interface-and-implementation)
+- [Service Overview](#service-overview)
 - [Key Methods](#key-methods)
-- [Integration and Usage](#integration-and-usage)
+- [Example Usage](#example-usage)
+- [Integration Details](#integration-details)
 - [Architecture Diagram](#architecture-diagram)
-- [Source Code](#source-code)
+- [See Also](#see-also)
 
 ---
 
 ## Introduction
 
-The Home Service provides the business logic for the Home feature of the application. Its primary responsibility is to retrieve and list todo items from the underlying domain storage, making these todos available for rendering in the home page UI.
+The Home Service is a core part of the application's feature layer responsible for managing the logic behind the home page of the Todo web application. It abstracts operations related to listing todo items by interacting with the domain layer's `TodoRepository` interface. This service serves as the business logic layer between the HTTP handlers and the domain entities.
 
-This service acts as an abstraction between the HTTP handlers (controllers) and the domain's `TodoRepository`, encapsulating all logic related to accessing todo data needed specifically by the Home feature.
+The Home Service primarily focuses on retrieving and providing a read-only list of todos to the home page handler without modifying the underlying data.
 
----
+## Service Overview
 
-## Service Interface and Implementation
+The Home Service is defined as an interface and implemented by a private struct that holds a reference to a `TodoRepository`. This repository is responsible for CRUD operations on todo items at the domain level.
 
-The Home Service is defined by an interface that exposes a single method:
+### Key Responsibilities
 
-```go
-// Service provides business operations for the Home feature.
-type Service interface {
-    List(ctx context.Context) ([]*domain.Todo, error)
-}
-```
+- Fetching all todos to be displayed on the home page
+- Delegating data access and query operations to the domain repository
 
-Its concrete implementation, typically named `service`, holds a reference to a `domain.TodoRepository`:
-
-```go
-// service implements the Home Service interface.
-type service struct {
-    todos domain.TodoRepository
-}
-
-// NewService constructs a new Home Service with the provided TodoRepository
-func NewService(todos domain.TodoRepository) Service {
-    return &service{todos: todos}
-}
-```
-
-The `List` method interacts with the repository to retrieve all todo items:
-
-```go
-func (s *service) List(ctx context.Context) ([]*domain.Todo, error) {
-    return s.todos.All()
-}
-```
-
-This keeps the service thin and focused, delegating persistence handling to the domain layer.
-
----
+This clear separation keeps the home feature lean, focusing on data retrieval for the home view.
 
 ## Key Methods
 
 ### List(ctx context.Context) ([]*domain.Todo, error)
 
-- Fetches all todo items by calling the `All()` method of the `TodoRepository`.
-- Returns a slice of pointers to `domain.Todo` instances.
-- Propagates any errors from the repository.
+- Retrieves a complete list of todos.
+- Returns a slice of pointers to `domain.Todo` and an error in case of failure.
+
+## Example Usage
 
 ```go
-// List returns all todos from the repository
+package home
+
+import (
+  "context"
+  "internal/domain"
+)
+
+// Service defines the interface for home service
+type Service interface {
+  List(ctx context.Context) ([]*domain.Todo, error)
+}
+
+// service implements the Service interface
+// it encapsulates a TodoRepository for data access
+
+type service struct {
+  todos domain.TodoRepository
+}
+
+// NewService creates a new service with the given TodoRepository
+func NewService(todos domain.TodoRepository) Service {
+  return &service{todos: todos}
+}
+
+// List fetches all todos from the repository
 func (s *service) List(ctx context.Context) ([]*domain.Todo, error) {
-    return s.todos.All()
+  return s.todos.All()
 }
 ```
 
-This is the only method exposed by the Home Service, reflecting the simple nature of the home page display requirements.
+## Integration Details
 
----
+The Home Service acts as a mediator between the HTTP handler layer (`internal/features/home/handler.go`) and the domain layer's `TodoRepository` (`internal/domain/todo_repository.go`). It depends on:
 
-## Integration and Usage
+- `domain.TodoRepository` interface, which abstracts data operations on todos.
+- The service does not mutate data, keeping responsibility limited to read operations.
 
-The Home Service integrates within the broader application architecture as follows:
+### Interaction Pattern
 
-- **Dependencies:**
-  - Depends on the `domain.TodoRepository` interface to perform todo data access operations.
-  - Used by the Home feature's HTTP handler to serve requests.
+1. **Handler Layer:** The HTTP handler calls `List` to retrieve todos for rendering the homepage.
+2. **Service Layer:** Delegates to the domain repository to access the stored todos.
+3. **Domain Layer:** Returns the list of todos, possibly from memory or persistent storage.
 
-- **Interaction pattern:**
-  1. The HTTP handler calls `service.List(ctx)` to fetch todos.
-  2. The service relays this call to the domain repository's `All()` method.
-  3. The repository returns the todos stored in memory or persistent storage.
-  4. The handler receives the todos and renders the home page template.
-
-This layered separation allows independent testing and clear responsibility:
-
-- The domain defines the core data and repository interface.
-- The service implements business logic and coordinates domain interactions.
-- The handler manages HTTP request/response cycles.
-
-<br>
-
-The Home Service is instantiated in the server entrypoint (`cmd/server/main.go`) with the in-memory `domain.Todos` repository:
-
-```go
-list := domain.NewTodos()
-// Add example todos
-list.Add("Buy milk")
-list.Add("Learn Go")
-
-homeService := home.NewService(list)
-homeHandler := home.NewHandler(homeService)
-home.Mount(router, homeHandler)
-```
-
----
+This layered architecture ensures separation of concerns, testability, and maintainability.
 
 ## Architecture Diagram
 
 ```mermaid
 flowchart TD
-  HTTP_Request[HTTP Request to `/`] -->|calls| Home_Handler[Home Handler]
-  Home_Handler -->|calls| Home_Service[List(ctx)]
-  Home_Service -->|calls| Todo_Repository_All[TodoRepository.All()]
-  Todo_Repository_All -->|returns| Home_Service
-  Home_Service -->|returns todos| Home_Handler
-  Home_Handler -->|renders template| HTTP_Response[HTTP Response]
+  Handler(Home Handler) -->|calls| Service(Home Service)
+  Service -->|uses| DomainRepo(TodoRepository Interface)
+  DomainRepo -->|manages| DomainModel(Todo Domain Model)
+  DomainModel --> Database[(Data Storage)]
 ```
 
-This diagram illustrates how a request to the root path flows through the system, beginning from the HTTP handler to the service and down to the domain repository, and then back up with the todo data for rendering.
+## See Also
+
+- [Home Handler](internal/features/home/handler.go) — Connects HTTP routes to the Home Service
+- [TodoRepository Interface](internal/domain/todo_repository.go) — Domain contract for todo data access
+- [Todos Model](internal/domain/todos.go) — Domain model representing collections of todos
+- [Todos Feature Overview](internal/features/todos) — For managing todo CRUD and sorting operations
+- [Main Server Entrypoint](cmd/server/main.go) — Shows service initialization and injection
 
 ---
 
-## Source Code
-
-- Home Service implementation: [internal/features/home/service.go](/internal/features/home/service.go)
-- Domain TodoRepository interface: [internal/domain/todo_repository.go](/internal/domain/todo_repository.go)
-- Server setup where service is instantiated: [cmd/server/main.go](/cmd/server/main.go)
-
----
-
-The Home Service represents a simple but important abstraction in the application, neatly encapsulating logic for retrieving todos for the home page while depending on interfaces from the domain model, supporting maintainability, testability, and separation of concerns.
+For full implementation details, visit the [home service source file](internal/features/home/service.go).

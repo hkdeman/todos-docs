@@ -5,57 +5,51 @@ description: 'HTTP handler implementation for serving the root route ''/'' with 
 
 # Table of Contents
 
-- [Introduction](#introduction)
-- [Overview of Home Handler](#overview-of-home-handler)
-- [Key Methods and Behavior](#key-methods-and-behavior)
+- [Overview](#overview)
+- [Handler Structure](#handler-structure)
+- [Key Endpoints](#key-endpoints)
 - [Code Example](#code-example)
-- [Architecture and Integration](#architecture-and-integration)
-- [Request Flow Diagram](#request-flow-diagram)
-- [Further Reading and References](#further-reading-and-references)
+- [Integration & Dependencies](#integration--dependencies)
+- [Flow Diagram](#flow-diagram)
 
 ---
 
-## Introduction
+## Overview
 
-The **Home Handler** is a crucial component of the Todo application responsible for processing HTTP requests at the root URL `/`. Its primary function is to retrieve the current list of todos and serve the home page, which serves as the entry point for end users to view their todo list.
+The Home Handler is responsible for processing HTTP requests to the root path (`/`) of the application, providing a user interface entry point to display a list of todo items. It acts as the web layer connecting the backend service logic to the HTTP layer, fetching todos via the Home Service and rendering the home page template.
 
-This documentation provides a detailed overview of the Home Handler's role, its interface, core behavior, sample usage, and how it integrates with other layers of the application.
-
----
-
-## Overview of Home Handler
-
-The Home Handler acts as the HTTP controller layer for the Home feature of the application. It:
-
-- Handles incoming GET requests to the root `/` path.
-- Calls the Home Service to obtain the current list of todos.
-- Constructs and renders the home page UI using the template system.
-
-By isolating the HTTP request handling logic, it simplifies testing and promotes separation of concerns.
+This handler primarily handles **GET /** requests that retrieve all todo items and renders them using server-side templates to create the home page.
 
 ---
 
-## Key Methods and Behavior
+## Handler Structure
 
-The Home Handler exposes the following key functionality:
+The Home Handler exposes an interface and concrete implementation encapsulating all HTTP request handling logic for the home feature.
 
-- **Home(w http.ResponseWriter, r *http.Request):**
-  - The main HTTP endpoint handler for root `/` GET requests.
-  - Calls the service to list todos.
-  - Converts the todo data into a page template.
-  - Renders the page to the HTTP response.
+- It depends on a `Service` interface that provides listing functionality to retrieve todos.
+- It exposes a method to mount itself to a router under the root path.
+- The core handler function uses the service to fetch todos, then renders the page using internal templates.
 
-- **NewHandler(service Service) Handler:**
-  - Factory function that creates a new Home Handler instance wired with a Home Service.
+### Key Components:
 
-- **Mount(r chi.Router, h Handler):**
-  - Utility method to register the handler routes to a given router.
+| Component       | Description                                                |
+|-----------------|------------------------------------------------------------|
+| `Handler`       | Interface for handling home page routes                    |
+| `NewHandler(svc)` | Instantiates a handler with a Home Service                 |
+| `Mount(r, h)`   | Mounts the handler to a router under path `/`              |
+| `handler.Home`  | Handles GET `/` requests, lists todos, and renders page    |
 
-### Concepts
+---
 
-- **Handler Interface:** Encapsulates the HTTP handler methods for the Home feature.
-- **Service Layer:** Provides business logic to list todos and acts as an abstraction over the domain repository.
-- **Rendering Layer:** Uses templating to produce the final HTML page that the user sees.
+## Key Endpoints
+
+### GET `/`
+
+- Fetches the todo list via the service layer.
+- Renders the home page HTML with todo data.
+- Returns proper HTTP status and error handling if list retrieval fails.
+
+This endpoint serves as the main landing page and displays the collection of todos to the user.
 
 ---
 
@@ -69,109 +63,94 @@ import (
   "net/http"
 
   "github.com/go-chi/chi/v5"
-  "yourmodule/internal/templates/pages"
+  "internal/domain"
+  "internal/templates/pages"
 )
 
-// Handler interface defines HTTP handler methods for home feature
+// Handler interface for the home feature
 type Handler interface {
-  Home(w http.ResponseWriter, r *http.Request)
+  Mount(r chi.Router)
 }
 
-// handler is the concrete implementation composing a service
+// concrete handler
 type handler struct {
   service Service
 }
 
-// NewHandler creates a new home.Handler
+// NewHandler returns a new home handler
 func NewHandler(svc Service) Handler {
   return &handler{service: svc}
 }
 
-// Mount sets up the routes for the home handler
+// Mount mounts HTTP handlers on router
 func Mount(r chi.Router, h Handler) {
+  h.Mount(r)
+}
+
+func (h *handler) Mount(r chi.Router) {
   r.Get("/", h.Home)
 }
 
-// Home serves the root page with a list of todos
+// Home handles GET /
 func (h *handler) Home(w http.ResponseWriter, r *http.Request) {
   ctx := r.Context()
-  todos, err := h.service.List(ctx) // Retrieve todos from service
+  todos, err := h.service.List(ctx)
   if err != nil {
     http.Error(w, "Failed to load todos", http.StatusInternalServerError)
     return
   }
 
-  page := pages.HomePage(todos) // Create a page template with todos
-  if err := page.Render(ctx, w); err != nil { // Render page to response
+  page := pages.HomePage(todos)
+  if err := page.Render(ctx, w); err != nil {
     http.Error(w, "Failed to render page", http.StatusInternalServerError)
   }
 }
 ```
 
-This example demonstrates the core flow of the Home Handler:
-
-1. Receive an HTTP request on `/`.
-2. Call `service.List` to fetch todos.
-3. Build a templated page.
-4. Render HTML to the client.
-
 ---
 
-## Architecture and Integration
+## Integration & Dependencies
 
-The Home Handler operates within the following architectural context:
+The Home Handler fits into the overall system architecture as described below:
 
-- **Incoming HTTP Requests:** Routed by the main application router and directed to the Home Handler.
-- **Home Service:** The handler calls the service layer to perform business logic operations. The service in turn uses the domain `TodoRepository` to fetch data.
-- **Templates:** The handler constructs page objects that encapsulate todo data and delegate rendering using the templating engine.
+- **Dependency on Home Service**: The handler depends on the Home Service interface that provides a method to list all todos. This service abstracts away all business logic and data retrieval.
 
-### Dependencies
+- **Router Integration**: The handler mounts its routes on a `chi` router under path `/`, allowing it to serve home page requests.
 
-- `internal/features/home/service.go`: Provides the `Service` interface used by the handler.
-- `internal/domain/todo_repository.go`: Abstract domain repository underlying data operations.
-- `internal/templates/pages/Home.go`: Defines the UI template for the home page rendering.
-- `github.com/go-chi/chi/v5`: Used for routing HTTP requests.
+- **Templates**: Uses internal template packages (`internal/templates/pages`) to render the home HTML view.
 
-### System Touchpoints
+- **Domain Model**: The todos returned by the service are domain entities (`[]*domain.Todo`), ensuring separation of concerns.
 
-- The Home Handler is mounted on the main chi router inside the server entrypoint.
-- It serves as the user interface entry for viewing the todo list.
-- It acts as a thin controller, delegating business logic and UI rendering to other layers.
+- **Other Components**:
+  - The Home Service implementation typically wraps a domain repository to access todos.
+  - Higher level routing is configured to combine this handler with others (e.g., `/todos` routes, static assets).
 
----
-
-## Request Flow Diagram
+#### Integration Pattern
 
 ```mermaid
 flowchart TD
-  Client[Client Browser] -->|GET /| Router[HTTP Router - chi]
-  Router --> HomeHandler[Home Handler]
-  HomeHandler --> HomeService[Home Service]
-  HomeService --> DomainRepo[Domain TodoRepository]
-  DomainRepo --> DomainData[Todo Data Store]
-  HomeService --> HomeHandler
-  HomeHandler --> Templates[Page Templates]
-  Templates -->|Render HTML| Client
+  A[HTTP Request: GET /] --> B[Home Handler]
+  B --> C[Home Service List]
+  C --> D[Domain TodoRepository]
+  D --> C
+  C --> B
+  B --> E[Render HomePage Template]
+  E --> F[HTTP Response]
 ```
 
-This diagram shows the vertical layers involved:
-
-- HTTP Router directs root requests to the Home Handler.
-- Handler calls service layer for business logic.
-- Service fetches domain data.
-- Handler uses templates to render the page.
-- Response is sent back to the client.
+- The handler receives the request and calls the service.
+- The service fetches todos from the domain repository.
+- The handler renders the HTML page using the fetched todos.
+- The HTTP response with rendered content is returned.
 
 ---
 
-## Further Reading and References
+## Source Links
 
-- [Home Service](/internal/features/home/service.go) - details business logic to list todos.
-- [Domain TodoRepository](/internal/domain/todo_repository.go) - interface for todo data operations.
-- [Home Handler Source](/internal/features/home/handler.go) - handler implementation code.
-- [Page Templates](/internal/templates/pages) - UI rendering templates for home page.
-- [Routing and Server Setup](/Documentation/Architecture/Routing%20and%20Server%20Setup) - app startup and routing.
+- See the handler implementation code: [internal/features/home/handler.go](/internal/features/home/handler.go)
+- Home Service interface and implementation: [internal/features/home/service.go](/internal/features/home/service.go)
+- Template rendering for home page: [internal/templates/pages/home.go](/internal/templates/pages/home.go)
 
 ---
 
-This completes the documentation for the Home Handler feature covering its purpose, core functionality, usage example, integration details, and flow within the overall system.
+This concise yet extensible design allows the Home Handler to serve as the entrypoint of the web UI while cleanly separating concerns across routing, service logic, domain model, and presentation.
